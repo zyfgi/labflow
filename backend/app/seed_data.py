@@ -400,5 +400,146 @@ def seed_domain(db: Session, users: dict) -> None:
     db.flush()
     logger.info("experiments: +%d", exp_created)
 
+    # ---- equipment / bookings / borrows / maintenance ----
+    from app.models.equipment import (  # noqa: PLC0415
+        Equipment,
+        EquipmentBooking,
+        EquipmentBorrow,
+        EquipmentMaintenance,
+    )
+    from app.models.enums import (  # noqa: PLC0415
+        BookingStatus,
+        BorrowStatus,
+        EquipmentStatus,
+        MaintenanceStatus,
+    )
+
+    EQUIPMENT = [
+        ("EQ-WS-001", "高性能工作站", "计算设备", "Dell", "Precision 7960", "available", "admin", "楼 305"),
+        ("EQ-OSC-001", "示波器", "测量仪器", "Tektronix", "MDO34", "available", "equipadmin", "实验室 A203"),
+        ("EQ-DAS-001", "数据采集系统", "测量仪器", "NI", "cDAQ-9178", "available", "equipadmin", "实验室 A203"),
+        ("EQ-IMU-001", "双 IMU 测试平台", "实验平台", "自研", "IMU-Rig v2", "in_use", "phd01", "实验室 B101"),
+        ("EQ-FTS-001", "六维力传感器", "传感器", "ATI", "Mini45", "fault", "phd02", "实车试验车"),
+        ("EQ-MTR-001", "电机控制器", "执行部件", "汇川", "IS620N", "available", "teacher01", "实验室 B101"),
+    ]
+    for asset_no, name, category, maker, model, status, manager, location in EQUIPMENT:
+        if db.scalar(select(Equipment).where(Equipment.asset_no == asset_no)):
+            continue
+        db.add(
+            Equipment(
+                asset_no=asset_no,
+                name=name,
+                category=category,
+                manufacturer=maker,
+                model=model,
+                location=location,
+                manager_id=users[manager].id,
+                status=status,
+                purchase_date=date(2024, 6, 1),
+                booking_required=True,
+                description=f"{name}（{maker} {model}）",
+            )
+        )
+    db.flush()
+
+    eq_map = {e.name: e for e in db.scalars(select(Equipment)).all() if not e.deleted_at}
+    now = datetime.combine(today, datetime.min.time())
+
+    def booking(equipment_name: str, username: str, day_offset: int, hour_start: int, hour_end: int, status: str) -> None:
+        eq = eq_map.get(equipment_name)
+        if not eq:
+            return
+        start = now + timedelta(days=day_offset, hours=hour_start)
+        end = now + timedelta(days=day_offset, hours=hour_end)
+        if db.scalar(
+            select(EquipmentBooking).where(
+                EquipmentBooking.equipment_id == eq.id,
+                EquipmentBooking.start_time == start,
+            )
+        ):
+            return
+        db.add(
+            EquipmentBooking(
+                equipment_id=eq.id,
+                user_id=users[username].id,
+                start_time=start,
+                end_time=end,
+                purpose="数据采集试验" if username.startswith(("master", "phd", "under")) else "课题测试",
+                status=status,
+                approved_by=users["equipadmin"].id if status == BookingStatus.APPROVED else None,
+                approved_at=now if status == BookingStatus.APPROVED else None,
+            )
+        )
+
+    booking("示波器", "master01", 0, 9, 11, BookingStatus.APPROVED)
+    booking("示波器", "master04", 0, 14, 16, BookingStatus.PENDING)
+    booking("数据采集系统", "phd01", 1, 9, 12, BookingStatus.APPROVED)
+    booking("数据采集系统", "phd02", 1, 10, 11, BookingStatus.PENDING)
+    booking("高性能工作站", "master05", 2, 9, 18, BookingStatus.APPROVED)
+    booking("双 IMU 测试平台", "phd01", 3, 13, 17, BookingStatus.PENDING)
+    booking("电机控制器", "master01", 4, 9, 11, BookingStatus.COMPLETED)
+    db.flush()
+
+    def borrow(equipment_name: str, username: str, days_ago: int, return_in_days: int, status: str) -> None:
+        eq = eq_map.get(equipment_name)
+        if not eq:
+            return
+        if db.scalar(
+            select(EquipmentBorrow).where(
+                EquipmentBorrow.equipment_id == eq.id, EquipmentBorrow.borrow_time == now - timedelta(days=days_ago)
+            )
+        ):
+            return
+        borrow_time = now - timedelta(days=days_ago)
+        expected = borrow_time + timedelta(days=return_in_days)
+        db.add(
+            EquipmentBorrow(
+                equipment_id=eq.id,
+                borrower_id=users[username].id,
+                borrow_time=borrow_time,
+                expected_return_time=expected,
+                actual_return_time=borrow_time + timedelta(days=return_in_days - 1) if status == BorrowStatus.RETURNED else None,
+                purpose="实车数据采集",
+                status=status,
+            )
+        )
+
+    borrow("数据采集系统", "under02", 10, 3, BorrowStatus.RETURNED)
+    borrow("双 IMU 测试平台", "phd01", 2, 5, BorrowStatus.BORROWED)
+    borrow("示波器", "under01", 6, 2, BorrowStatus.OVERDUE)
+    db.flush()
+
+    def maintenance(equipment_name: str, reporter: str, mtype: str, status: str, desc: str, days_ago: int) -> None:
+        eq = eq_map.get(equipment_name)
+        if not eq:
+            return
+        reported = now - timedelta(days=days_ago)
+        if db.scalar(
+            select(EquipmentMaintenance).where(
+                EquipmentMaintenance.equipment_id == eq.id, EquipmentMaintenance.reported_at == reported
+            )
+        ):
+            return
+        db.add(
+            EquipmentMaintenance(
+                equipment_id=eq.id,
+                reporter_id=users[reporter].id,
+                type=mtype,
+                description=desc,
+                reported_at=reported,
+                started_at=reported + timedelta(hours=6) if status != MaintenanceStatus.REPORTED else None,
+                finished_at=reported + timedelta(days=2) if status == MaintenanceStatus.COMPLETED else None,
+                status=status,
+                vendor="原厂售后" if status != MaintenanceStatus.REPORTED else None,
+                cost=None,
+                result="更换信号线后恢复正常" if status == MaintenanceStatus.COMPLETED else None,
+            )
+        )
+
+    maintenance("六维力传感器", "phd02", "fault", MaintenanceStatus.PROCESSING, "六维力传感器无输出，怀疑线缆断裂", 3)
+    maintenance("示波器", "equipadmin", "calibration", MaintenanceStatus.COMPLETED, "年度校准", 30)
+    db.flush()
+    logger.info("equipment/booking/borrow/maintenance seeded")
+
     db.commit()
-    logger.info("seed_domain (M5 scope) done")
+    logger.info("seed_domain (M6 scope) done")

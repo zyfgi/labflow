@@ -1,11 +1,15 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, utcnow
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class Equipment(Base, TimestampMixin):
@@ -63,6 +67,8 @@ class EquipmentBooking(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
 
 
 class EquipmentBorrow(Base, TimestampMixin):

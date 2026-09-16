@@ -334,3 +334,53 @@ PI 解锁 → is_locked: False ✅
 ## Next Step
 
 Milestone 6：Equipment/Booking(冲突)/Borrow/Maintenance/二维码
+
+---
+
+# Milestone 6 — 仪器设备管理
+
+## Completed
+
+- Equipment 台账 CRUD（软删除，PI/设备管理员管理，其余只读）
+- EquipmentBooking：创建（pending）→ approve/reject（仅 PI/设备管理员）→ cancel；冲突规则后端强制：同设备 pending/approved 预约 `new_start < existing_end AND new_end > existing_start` → 409；相邻（end==start）允许；修改时间重查冲突
+- EquipmentBorrow：借出（设备状态→borrowed，重复借出 409）→ 归还（→returned，设备回 available）；逾期标记
+- EquipmentMaintenance：任意成员上报 fault（设备→fault，通知设备管理员）→ 管理员 processing（→maintenance）→ completed（→available，记录成本/厂商/结果）
+- 前端：设备台账、设备详情（信息 + 下一次预约 + 最近维护 + 预约列表 + 批准/拒绝 + 二维码显示/下载 PNG）、预约页、借用页、维修页
+- seed：6 台设备、7 条预约、3 条借用（含逾期）、2 条维修
+
+## Files Changed
+
+- `backend/app/api/v1/equipment.py`、`app/schemas/equipment.py`、`app/models/equipment.py`（+user relationship）、`app/seed_data.py`、`tests/test_equipment.py`
+- `frontend/src/api/equipment.ts`、`views/equipment/{EquipmentView,EquipmentDetailView,BookingsView,BorrowsView,MaintenanceView}.vue`、`router/index.ts`
+
+## API Added
+
+```
+GET/POST /equipment  GET/PATCH/DELETE /equipment/{id}
+GET/POST /equipment-bookings  PATCH /equipment-bookings/{id}
+POST /equipment-bookings/{id}/approve|reject|cancel
+GET/POST /equipment-borrows  POST /equipment-borrows/{id}/return
+GET/POST /equipment-maintenance  PATCH /equipment-maintenance/{id}
+```
+
+## Tests
+
+Command: `.venv/Scripts/python -m pytest -q`
+Result: **64 passed**（新增 7：学生不可改台账/重叠预约 409/相邻允许/审批拒绝+通知/借还流程+状态/故障上报-处理-恢复/非法时间 422）
+
+## Manual Verification（真实 HTTP，master01/equipadmin，真实 seed 设备）
+
+```text
+预约 A 10:00-12:00 → approved ✅
+冲突预约 B 11:00-13:00 → 409「预约时间冲突」✅
+相邻预约 C 12:00-14:00 → 201 ✅
+借出 → 设备 borrowed ✅；归还 → returned ✅
+```
+
+## Known Issues
+
+- 二维码在前端生成（qrcode 库），扫码直达 /equipment/{id}，未登录由路由守卫跳登录
+
+## Next Step
+
+Milestone 7：PI/Student Dashboard（全部真实数据）

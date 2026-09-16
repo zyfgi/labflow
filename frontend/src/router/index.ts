@@ -77,6 +77,36 @@ const router = createRouter({
           meta: { title: '实验详情', menu: 'experiments' },
         },
         {
+          path: 'equipment',
+          name: 'equipment',
+          component: () => import('@/views/equipment/EquipmentView.vue'),
+          meta: { title: '设备台账', menu: 'equipment' },
+        },
+        {
+          path: 'equipment/:id',
+          name: 'equipment-detail',
+          component: () => import('@/views/equipment/EquipmentDetailView.vue'),
+          meta: { title: '设备详情', menu: 'equipment' },
+        },
+        {
+          path: 'equipment-bookings',
+          name: 'equipment-bookings',
+          component: () => import('@/views/equipment/BookingsView.vue'),
+          meta: { title: '设备预约', menu: 'bookings' },
+        },
+        {
+          path: 'equipment-borrows',
+          name: 'equipment-borrows',
+          component: () => import('@/views/equipment/BorrowsView.vue'),
+          meta: { title: '借用记录', menu: 'borrows' },
+        },
+        {
+          path: 'equipment-maintenance',
+          name: 'equipment-maintenance',
+          component: () => import('@/views/equipment/MaintenanceView.vue'),
+          meta: { title: '故障维修', menu: 'maintenance' },
+        },
+        {
           path: 'weekly-reports',
           name: 'weekly-reports',
           component: () => import('@/views/report/WeeklyReportsView.vue'),
