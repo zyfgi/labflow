@@ -1,10 +1,14 @@
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, utcnow
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class Project(Base, TimestampMixin):
@@ -50,6 +54,7 @@ class ProjectMember(Base):
     left_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship()
 
 
 class Milestone(Base, TimestampMixin):
@@ -101,3 +106,21 @@ class Task(Base, TimestampMixin):
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+
+
+class TaskComment(Base):
+    """Comments / activity records shown on the task detail page."""
+
+    __tablename__ = "task_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[int] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    user: Mapped["User"] = relationship()

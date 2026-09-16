@@ -214,5 +214,118 @@ def seed_domain(db: Session, users: dict) -> None:
     db.flush()
     logger.info("weekly_reports: +%d", report_count)
 
+    # ---- projects / milestones / tasks ----
+    from app.models.project import Milestone, Project, ProjectMember, Task  # noqa: PLC0415
+    from app.models.enums import MilestoneStatus  # noqa: PLC0415
+
+    PROJECTS = [
+        {
+            "code": "LAB-P001", "name": "车辆参数在线估计", "research_direction": "车辆参数与状态在线估计",
+            "status": ProjectStatus.ACTIVE, "priority": "high", "progress": 45,
+            "owner": "admin", "description": "基于多源传感的整车参数在线辨识，重点解决垂向/侧偏刚度时变估计问题。",
+            "members": [("phd01", "researcher"), ("master04", "student"), ("under01", "student")],
+            "milestones": [
+                ("完成数据采集方案", 30, MilestoneStatus.COMPLETED),
+                ("辨识算法基线跑通", -14, MilestoneStatus.IN_PROGRESS),
+                ("实车验证", 45, MilestoneStatus.PENDING),
+            ],
+            "tasks": [
+                ("整理 2025 年实车采集数据", "phd01", 20, TaskStatus.DONE, -25, 10),
+                ("递推最小二乘算法实现", "phd01", 55, TaskStatus.IN_PROGRESS, -10, 12),
+                ("IMU 安装误差标定", "master04", 30, TaskStatus.IN_PROGRESS, -5, 20),
+                ("采集数据清洗脚本", "under01", 80, TaskStatus.REVIEW, -12, 3),
+                ("编写中期汇报材料", "phd01", 10, TaskStatus.TODO, None, 25),
+                ("垂向刚度激励工况设计", "phd01", 0, TaskStatus.TODO, 5, 40),
+            ],
+        },
+        {
+            "code": "LAB-P002", "name": "轮胎力在线估计", "research_direction": "轮胎-路面摩擦估计",
+            "status": ProjectStatus.ACTIVE, "priority": "critical", "progress": 30,
+            "owner": "admin", "description": "基于扩展卡尔曼滤波的轮胎力在线估计，目标在低附着路面达到 90% 精度。",
+            "members": [("phd02", "researcher"), ("master03", "student"), ("under02", "student")],
+            "milestones": [
+                ("UKF/EKF 对比结论", -20, MilestoneStatus.COMPLETED),
+                ("低附着工况验证", 21, MilestoneStatus.PENDING),
+            ],
+            "tasks": [
+                ("UKF 与 EKF 收敛性对比实验", "phd02", 100, TaskStatus.DONE, -30, -12),
+                ("B 类路面数据集整理", "master03", 60, TaskStatus.IN_PROGRESS, -8, 15),
+                ("估计器代码工程化重构", "phd02", 25, TaskStatus.IN_PROGRESS, -6, 30),
+                ("低附着标定试验申请", "under02", 0, TaskStatus.BLOCKED, None, 18),
+                ("撰写轮胎力估计论文大纲", "phd02", 5, TaskStatus.TODO, None, 60),
+                ("六维力传感器标定复核", "phd02", 0, TaskStatus.TODO, -1, -3),
+            ],
+        },
+        {
+            "code": "LAB-P003", "name": "车辆横摆稳定性控制", "research_direction": "底盘控制",
+            "status": ProjectStatus.PLANNING, "priority": "medium", "progress": 15,
+            "owner": "teacher01", "description": "面向分布式驱动电动汽车的横摆稳定性 LQR 控制策略研究。",
+            "members": [("master01", "student"), ("master02", "student"), ("master05", "student")],
+            "milestones": [
+                ("联合仿真环境搭建", 7, MilestoneStatus.IN_PROGRESS),
+                ("控制策略初版", 60, MilestoneStatus.PENDING),
+            ],
+            "tasks": [
+                ("CarSim-Simulink 联合仿真 demo", "master01", 40, TaskStatus.IN_PROGRESS, -7, 8),
+                ("二自由度模型读书笔记", "master01", 45, TaskStatus.IN_PROGRESS, -3, 14),
+                ("LQR 控制器仿真验证", "master01", 0, TaskStatus.TODO, 9, 40),
+                ("Spinning Up 教程复现", "master02", 60, TaskStatus.IN_PROGRESS, -20, 13),
+                ("Gym 车辆环境封装", "master05", 35, TaskStatus.IN_PROGRESS, -4, 28),
+                ("调研分布式驱动控制文献", "master02", 0, TaskStatus.TODO, 2, 35),
+            ],
+        },
+    ]
+
+    for spec in PROJECTS:
+        if db.scalar(select(Project).where(Project.code == spec["code"])):
+            continue
+        project = Project(
+            name=spec["name"],
+            code=spec["code"],
+            description=spec["description"],
+            research_direction=spec["research_direction"],
+            status=spec["status"],
+            priority=spec["priority"],
+            progress=spec["progress"],
+            visibility="lab",
+            owner_id=users[spec["owner"]].id,
+            start_date=date(2026, 3, 1),
+            expected_end_date=date(2027, 3, 1),
+        )
+        db.add(project)
+        db.flush()
+        db.add(ProjectMember(project_id=project.id, user_id=users[spec["owner"]].id, project_role="owner"))
+        for username, role in spec["members"]:
+            db.add(ProjectMember(project_id=project.id, user_id=users[username].id, project_role=role))
+        today = date.today()
+        for title, offset_days, status in spec["milestones"]:
+            db.add(
+                Milestone(
+                    project_id=project.id,
+                    title=title,
+                    due_date=today + timedelta(days=offset_days),
+                    status=status,
+                    progress=100 if status == MilestoneStatus.COMPLETED else (50 if status == MilestoneStatus.IN_PROGRESS else 0),
+                )
+            )
+        for idx, (title, assignee, progress, status, due_offset, *_rest) in enumerate(spec["tasks"]):
+            task_due = today + timedelta(days=due_offset) if due_offset is not None else None
+            db.add(
+                Task(
+                    project_id=project.id,
+                    title=title,
+                    description=f"seed task {spec['code']} #{idx + 1}",
+                    assignee_id=users[assignee].id,
+                    creator_id=users[spec["owner"]].id,
+                    priority="high" if spec["priority"] == "critical" else "medium",
+                    status=status,
+                    progress=progress,
+                    due_date=task_due,
+                    completed_at=datetime.combine(today - timedelta(days=1), datetime.min.time()) if status == TaskStatus.DONE else None,
+                )
+            )
+    db.flush()
+    logger.info("projects/milestones/tasks seeded")
+
     db.commit()
-    logger.info("seed_domain (M3 scope) done")
+    logger.info("seed_domain (M4 scope) done")

@@ -100,6 +100,21 @@ TASK_STATUSES = [
 TASK_PRIORITIES = ["low", "medium", "high", "critical"]
 
 
+class MilestoneStatus:
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+MILESTONE_STATUSES = [
+    MilestoneStatus.PENDING,
+    MilestoneStatus.IN_PROGRESS,
+    MilestoneStatus.COMPLETED,
+    MilestoneStatus.CANCELLED,
+]
+
+
 class ExperimentStatus:
     DRAFT = "draft"
     RUNNING = "running"

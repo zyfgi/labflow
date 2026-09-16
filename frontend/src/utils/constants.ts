@@ -91,6 +91,20 @@ export const PRIORITY_TAGS: Record<string, TagType> = {
   critical: 'danger',
 }
 
+export const MILESTONE_STATUS_LABELS: Record<string, string> = {
+  pending: '未开始',
+  in_progress: '进行中',
+  completed: '已完成',
+  cancelled: '已取消',
+}
+
+export const MILESTONE_STATUS_TAGS: Record<string, TagType> = {
+  pending: 'info',
+  in_progress: 'primary',
+  completed: 'success',
+  cancelled: 'info',
+}
+
 export const TASK_STATUS_LABELS: Record<string, string> = {
   todo: '待开始',
   in_progress: '进行中',

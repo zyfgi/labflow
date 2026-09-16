@@ -41,6 +41,30 @@ const router = createRouter({
           meta: { title: '学习计划', menu: 'member-plans' },
         },
         {
+          path: 'projects',
+          name: 'projects',
+          component: () => import('@/views/project/ProjectsView.vue'),
+          meta: { title: '项目', menu: 'projects' },
+        },
+        {
+          path: 'projects/:id',
+          name: 'project-detail',
+          component: () => import('@/views/project/ProjectDetailView.vue'),
+          meta: { title: '项目详情', menu: 'projects' },
+        },
+        {
+          path: 'tasks',
+          name: 'tasks',
+          component: () => import('@/views/task/TasksView.vue'),
+          meta: { title: '任务', menu: 'tasks' },
+        },
+        {
+          path: 'tasks/:id',
+          name: 'task-detail',
+          component: () => import('@/views/task/TaskDetailView.vue'),
+          meta: { title: '任务详情', menu: 'tasks' },
+        },
+        {
           path: 'weekly-reports',
           name: 'weekly-reports',
           component: () => import('@/views/report/WeeklyReportsView.vue'),

@@ -226,3 +226,60 @@ reviewed 后学生编辑 → 400 ✅
 ## Next Step
 
 Milestone 4：Project/ProjectMember/Milestone/Task + 项目级权限
+
+---
+
+# Milestone 4 — 科研项目与任务
+
+## Completed
+
+- Project CRUD（软删除）+ ProjectMember（唯一约束，owner 加入保护）+ Milestone + Task（软删除）+ TaskComment（任务详情评论/活动）
+- 项目级权限（RBAC + visibility + 成员资格 + owner 综合）：
+  - PI 全部可见；private/project_members 仅成员可见；lab 全实验室可见；GUEST 仅明确授权
+  - 管理权 = PI/owner/项目 manager；任务编辑权 = 项目管理方 + assignee/creator
+- 通知：任务分配/项目加入（Notification 真实写入）
+- 任务状态机：done → progress 100% + completed_at；逾期判定（due_date < today 且未完成）
+- seed：3 个项目（车辆参数在线估计/轮胎力在线估计/横摆稳定性控制）+ 8 个里程碑 + 18 条任务（含逾期/已完成/受阻）
+- 前端：项目列表、项目详情（概览/成员/里程碑/任务 Tabs + 权限化操作）、任务列表（只看我的/筛选）、任务详情（状态更新/进度/评论）
+
+## Files Changed
+
+- `backend/app/models/project.py`（+TaskComment）、`app/schemas/project.py`、`app/api/v1/{projects,tasks}.py`、`app/permissions/projects.py`
+- `backend/alembic/versions/2085ac133de4_task_comments.py`、`app/seed_data.py`、`tests/test_projects.py`
+- `frontend/src/api/{projects,tasks}.ts`、`components/TaskFormDialog.vue`、`views/project/{ProjectsView,ProjectDetailView}.vue`、`views/task/{TasksView,TaskDetailView}.vue`、`utils/constants.ts`、`router/index.ts`
+
+## Database Changes
+
+- 新表：task_comments（其余域表在 M2 已建）
+
+## API Added
+
+```
+GET/POST /projects  GET/PATCH/DELETE /projects/{id}
+GET/POST /projects/{id}/members  DELETE /projects/{id}/members/{user_id}
+GET/POST /projects/{id}/milestones  PATCH/DELETE /milestones/{id}
+GET/POST /tasks  GET/PATCH/DELETE /tasks/{id}  POST /tasks/{id}/status
+GET/POST /tasks/{id}/comments
+```
+
+## Tests
+
+Command: `.venv/Scripts/python -m pytest -q`
+Result: **51 passed**（新增 12：项目创建/编号重复 409/private 403/lab 可读/学生列表隔离/PI 全可见/成员不可改项目/里程碑完成/软删除/任务逾期判定/越权 403/评论/分配通知）
+
+## Manual Verification（真实 HTTP，seed 数据）
+
+```text
+PI 建项目 id=4 → 加成员 under02 → 建里程碑 → 建逾期任务 id=19 ✅
+成员学生读项目 → 200 ✅；非成员学生 → 403 ✅
+under02 /tasks?mine=true → status: todo | overdue: True ✅
+frontend build ✓ 6.99s
+```
+
+## Known Issues
+
+- 项目详情「实验」「活动」Tabs 在 M5/M8 启用
+
+## Next Step
+
+Milestone 5：Experiment/实验编号/附件上传/StorageService/lock/unlock
