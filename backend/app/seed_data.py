@@ -327,5 +327,78 @@ def seed_domain(db: Session, users: dict) -> None:
     db.flush()
     logger.info("projects/milestones/tasks seeded")
 
+    # ---- experiments ----
+    from app.models.experiment import Experiment  # noqa: PLC0415
+    from app.models.enums import ExperimentStatus as _ExpStatus  # noqa: PLC0415
+
+    EXPERIMENTS = [
+        ("LAB-P001", "phd01", "垂向刚度递推辨识验证", ExperimentStatus.COMPLETED, -18,
+         "验证递推最小二乘算法对垂向刚度时变的跟踪能力", "Myhil-1.0 台架，采样 1kHz",
+         "RLS 递推辨识，遗忘因子 0.995", "激励幅值 ±5mm，扫频 0.5-8Hz",
+         "刚度跟踪误差 8.2%，收敛时间 12s", "算法可用于实车场景", "采样频率在高频段不足",
+         "升级采集卡后重测", "https://git.labflow.edu.cn/est/vk-rbc", "a1b2c3d"),
+        ("LAB-P001", "phd01", "IMU 安装误差对辨识影响", ExperimentStatus.RUNNING, -6,
+         "量化安装角误差对刚度估计的敏感度", "实车前轴，IMU 三只",
+         "蒙特卡洛注入 ±2° 安装角", "500 组蒙特卡洛样本", None, None,
+         "样本量大，脚本偶发内存溢出", "分批处理", None, None),
+        ("LAB-P001", "master04", "滑模观测器仿真初验", ExperimentStatus.DRAFT, -2,
+         "对比滑模观测器与 Luenberger 观测器", "Simulink 仿真",
+         "滑模面线性化设计", "车速 20-80km/h 扫描", None, None, None, None, None, None),
+        ("LAB-P002", "phd02", "UKF-EKF 低附着对比", ExperimentStatus.COMPLETED, -25,
+         "评估两种滤波器在 mu=0.3 路面的估计精度", "CarSim+Simulink 联合仿真",
+         "UKF: alpha=1e-3,beta=2,kappa=0", "B 类路面，车速 60km/h",
+         "UKF 峰值误差 12%，EKF 21%", "UKF 为优选方案", "强侧风工况发散",
+         "增加自适应 Q", None, "3f4e5d6"),
+        ("LAB-P002", "phd02", "轮胎力估计器重构冒烟测试", ExperimentStatus.RUNNING, -4,
+         "验证重构后代码与原算法输出一致性", "Docker 容器，Python 3.12",
+         "模块化重构 + 回归对比", "回放历史数据集 3 组", "前两组一致",
+         None, "第三组存在 0.3% 偏差", "排查单位换算", None, None),
+        ("LAB-P002", "master03", "多源时间戳对齐验证", ExperimentStatus.COMPLETED, -9,
+         "验证硬件时间戳方案的对齐精度", "数据采集系统 + IMU",
+         "PTP 硬件时间戳", "1 小时连续采集", "对齐误差 <1ms", "方案可行", None,
+         "写入技术文档", None, None),
+        ("LAB-P003", "master01", "联合仿真环境冒烟", ExperimentStatus.FAILED, -5,
+         "跑通 CarSim-Simulink 横摆控制 demo", "CarSim 2020 + MATLAB R2023a",
+         "LQR 基础增益", "双移线工况", None, None,
+         "CarSim S-Function 无法加载", "检查版本兼容性，重装接口", "重装后重试", None, None),
+        ("LAB-P003", "master05", "Gym 环境阶跃响应测试", ExperimentStatus.DRAFT, -1,
+         "验证二自由度 Gym 环境的动力学正确性", "Python 3.12 + Gymnasium",
+         "阶跃转角输入", "60 组随机初始条件", None, None, None, None, None, None),
+    ]
+
+    exp_created = 0
+    for row in EXPERIMENTS:
+        proj_code, owner, title, status, day_offset = row[:5]
+        objective, env, method, params, result, conclusion, problems, next_step, repo, commit = (
+            list(row[5:15]) + [None] * 10
+        )[:10]
+        proj = db.scalar(select(Project).where(Project.code == proj_code))
+        if proj is None or db.scalar(select(Experiment).where(Experiment.title == title)):
+            continue
+        db.add(
+            Experiment(
+                experiment_no=f"EXP-{(today + timedelta(days=day_offset)).strftime('%Y%m%d')}-{(exp_created % 9) + 1:04d}",
+                project_id=proj.id,
+                title=title,
+                objective=objective,
+                owner_id=users[owner].id,
+                experiment_date=today + timedelta(days=day_offset),
+                status=status,
+                environment=env,
+                method=method,
+                parameters=params,
+                result_summary=result,
+                conclusion=conclusion,
+                problems=problems,
+                next_step=next_step,
+                code_repo_url=repo,
+                git_commit=commit,
+                is_locked=status == ExperimentStatus.COMPLETED and day_offset < -20,
+            )
+        )
+        exp_created += 1
+    db.flush()
+    logger.info("experiments: +%d", exp_created)
+
     db.commit()
-    logger.info("seed_domain (M4 scope) done")
+    logger.info("seed_domain (M5 scope) done")

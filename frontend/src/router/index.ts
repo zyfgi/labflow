@@ -65,6 +65,18 @@ const router = createRouter({
           meta: { title: '任务详情', menu: 'tasks' },
         },
         {
+          path: 'experiments',
+          name: 'experiments',
+          component: () => import('@/views/experiment/ExperimentsView.vue'),
+          meta: { title: '实验记录', menu: 'experiments' },
+        },
+        {
+          path: 'experiments/:id',
+          name: 'experiment-detail',
+          component: () => import('@/views/experiment/ExperimentDetailView.vue'),
+          meta: { title: '实验详情', menu: 'experiments' },
+        },
+        {
           path: 'weekly-reports',
           name: 'weekly-reports',
           component: () => import('@/views/report/WeeklyReportsView.vue'),

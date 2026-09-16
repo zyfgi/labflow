@@ -283,3 +283,54 @@ frontend build ✓ 6.99s
 ## Next Step
 
 Milestone 5：Experiment/实验编号/附件上传/StorageService/lock/unlock
+
+---
+
+# Milestone 5 — 实验记录
+
+## Completed
+
+- Experiment（软删除）+ ExperimentAttachment（DB 元数据 + 本地文件存储）
+- experiment_no 自动生成 `EXP-YYYYMMDD-XXXX`（按日递增 + 唯一约束）
+- StorageService 统一封装：文件名清理（去路径成分+非法字符替换）、UUID 前缀、扩展名白名单、100MB 可配置上限、路径穿越防护（resolve 后必须位于根目录内）、空文件拒绝
+- lock/unlock：锁定后学生（非管理方）不能修改/上传；解锁仅 PI/项目负责方并写审计日志
+- 附件下载走鉴权 API（FileResponse 流式），不做静态目录暴露
+- 前端：实验列表、实验详情（全字段编辑 + 可追溯信息区 + 附件上传/下载/删除 + 锁定状态）
+- seed：8 条实验（覆盖 completed/running/draft/failed、含锁定样例）
+
+## Files Changed
+
+- `backend/app/storage/__init__.py`、`app/schemas/experiment.py`、`app/api/v1/experiments.py`、`app/core/config.py`（白名单）、`app/seed_data.py`、`tests/test_experiments.py`
+- `frontend/src/api/experiments.ts`、`components/ExperimentFormDialog.vue`、`views/experiment/{ExperimentsView,ExperimentDetailView}.vue`、`router/index.ts`
+
+## API Added
+
+```
+GET/POST /experiments  GET/PATCH/DELETE /experiments/{id}
+POST /experiments/{id}/lock|unlock|attachments
+DELETE /experiment-attachments/{id}  GET /experiment-attachments/{id}/download
+```
+
+## Tests
+
+Command: `.venv/Scripts/python -m pytest -q`
+Result: **57 passed**（新增 6：编号自增/非成员 403/owner 更新/锁定禁止编辑+PI 解锁/附件上传下载与扩展名检查/锁定拒绝上传）
+
+## Manual Verification（真实 HTTP，phd02/admin）
+
+```text
+学生建实验 → EXP-20260917-0001 ✅
+更新结果 → completed ✅
+上传附件 → {"id":1,"file_size":10,...} ✅
+PI 锁定 → is_locked: True ✅
+学生编辑 → 403 ✅
+PI 解锁 → is_locked: False ✅
+```
+
+## Known Issues
+
+- 无（M2 遗留的 config 循环导入与文件拼接问题已修复）
+
+## Next Step
+
+Milestone 6：Equipment/Booking(冲突)/Borrow/Maintenance/二维码

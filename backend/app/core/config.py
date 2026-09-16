@@ -3,6 +3,9 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# upload whitelist lives here (not in app.models) to avoid an import cycle
+ALLOWED_UPLOAD_EXTENSIONS = ["pdf", "docx", "xlsx", "csv", "png", "jpg", "jpeg", "zip", "txt", "md"]
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -36,6 +39,10 @@ class Settings(BaseSettings):
         p = Path(self.UPLOAD_DIR)
         p.mkdir(parents=True, exist_ok=True)
         return p
+
+    @property
+    def allowed_extensions(self) -> list[str]:
+        return ALLOWED_UPLOAD_EXTENSIONS
 
 
 @lru_cache
