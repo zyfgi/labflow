@@ -177,3 +177,52 @@ frontend build ✓ 10.88s
 ## Next Step
 
 Milestone 3：周报 draft→submit→review→return 闭环 + 通知挂接
+
+---
+
+# Milestone 3 — 周报闭环
+
+## Completed
+
+- WeeklyReport 状态机：draft → submitted → reviewed；submitted → returned →（学生修改）→ 重新提交
+- 每人每周唯一（member_id, week_start DB 唯一约束 + service 409）；week_start 自动归一到周一
+- submitted 后学生不能修改（400）；审核/退回仅 PI/教师（403）；review_comment 全程可追溯
+- 通知挂接：提交→通知全体 PI/教师；审核/退回→通知学生（Notification 表真实写入）
+- seed：7 条周报（覆盖全部 4 种状态）
+- 前端：周报列表（staff 可按成员/状态筛选）、学生写/编辑/提交周报表单、PI 通过/退回（带意见）、详情含导师意见
+
+## Files Changed
+
+- `backend/app/api/v1/weekly_reports.py`、`app/schemas/report.py`、`app/models/report.py`（加 member relationship）
+- `backend/app/seed_data.py`、`backend/tests/test_weekly_reports.py`
+- `frontend/src/api/reports.ts`、`views/report/WeeklyReportsView.vue`、`router/index.ts`
+
+## API Added
+
+```
+GET/POST /weekly-reports  GET/PATCH /weekly-reports/{id}
+POST /weekly-reports/{id}/submit|review|return   GET /weekly-reports/me/current
+```
+
+## Tests
+
+Command: `.venv/Scripts/python -m pytest -q`
+Result: **39 passed**（新增 8：草稿创建/周一归一/同周 409/完整审核流/退回重交流/学生越权 403/staff 全量列表/编辑锁定）
+
+## Manual Verification（真实 HTTP，seed 账号 master05/admin）
+
+```text
+创建草稿 id=8 → submit: submitted ✅
+PI return → returned | please add data ✅
+学生修改 + resubmit → submitted ✅
+PI review → reviewed | ok passed ✅
+reviewed 后学生编辑 → 400 ✅
+```
+
+## Known Issues
+
+- Git Bash curl 发送中文 JSON 有编码问题（shell 限制）；pytest 与前端 axios 均正常
+
+## Next Step
+
+Milestone 4：Project/ProjectMember/Milestone/Task + 项目级权限

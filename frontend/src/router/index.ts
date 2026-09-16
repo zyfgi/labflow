@@ -41,6 +41,12 @@ const router = createRouter({
           meta: { title: '学习计划', menu: 'member-plans' },
         },
         {
+          path: 'weekly-reports',
+          name: 'weekly-reports',
+          component: () => import('@/views/report/WeeklyReportsView.vue'),
+          meta: { title: '周报', menu: 'reports' },
+        },
+        {
           path: 'system/users',
           name: 'system-users',
           component: () => import('@/views/system/UsersView.vue'),

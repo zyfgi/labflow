@@ -150,5 +150,69 @@ def seed_domain(db: Session, users: dict) -> None:
     db.flush()
     logger.info("learning_plans: +%d", plan_count)
 
+    # ---- weekly reports (relative to today so demo data always looks fresh) ----
+    today = date.today()
+    this_monday = today - timedelta(days=today.weekday())
+    last_monday = this_monday - timedelta(days=7)
+
+    def report(member_username: str, week_start: date, status: str, **fields) -> None:
+        profile = profiles.get(member_username)
+        if not profile:
+            return
+        if db.scalar(
+            select(WeeklyReport).where(
+                WeeklyReport.member_id == profile.id, WeeklyReport.week_start == week_start
+            )
+        ):
+            return
+        reviewer = fields.pop("reviewer", users["admin"])
+        review_comment = fields.pop("review_comment", None)
+        reviewed_at = fields.pop("reviewed_at", None)
+        db.add(
+            WeeklyReport(
+                member_id=profile.id,
+                week_start=week_start,
+                week_end=week_start + timedelta(days=6),
+                status=status,
+                submitted_at=fields.pop("submitted_at", datetime.combine(week_start + timedelta(days=4), datetime.min.time())),
+                reviewer_id=reviewer.id if reviewed_at else None,
+                reviewed_at=reviewed_at,
+                review_comment=review_comment,
+                **fields,
+            )
+        )
+
+    report("master01", this_monday, ReportStatus.SUBMITTED,
+           work_summary="完成 CarSim 联合仿真 demo 搭建", learning_summary="学习整车七自由度模型",
+           problems="转向阶跃工况发散", next_week_plan="调整轮胎模型参数", self_progress=45)
+    report("master01", last_monday, ReportStatus.REVIEWED,
+           work_summary="阅读横摆稳定性文献 5 篇", learning_summary="整理 LQR 基础",
+           next_week_plan="搭建 Simulink 模型", self_progress=35,
+           reviewer=users["admin"], review_comment="继续，注意对比不同控制增益",
+           reviewed_at=datetime.combine(last_monday + timedelta(days=6), datetime.min.time()))
+    report("phd01", this_monday, ReportStatus.SUBMITTED,
+           work_summary="完成垂向刚度辨识算法复现，误差 8%", learning_summary="递推最小二乘推导",
+           experiment_summary="Myhil 台架第一次标定", problems="采样频率不足", next_week_plan="升级采集卡驱动",
+           self_progress=60)
+    report("phd01", last_monday, ReportStatus.REVIEWED,
+           work_summary="跑通 UKF 基线", next_week_plan="复现论文算法", self_progress=50,
+           reviewer=users["admin"], review_comment="基线数据要存档到实验记录",
+           reviewed_at=datetime.combine(last_monday + timedelta(days=6), datetime.min.time()))
+    report("master02", this_monday, ReportStatus.RETURNED,
+           work_summary="看了一些资料", learning_summary="rl 入门",
+           problems="卡在环境配置", next_week_plan="继续配置环境", self_progress=20,
+           reviewer=users["admin"], review_comment="周报太笼统，请写清楚具体完成了什么、卡在哪一步",
+           reviewed_at=datetime.combine(this_monday + timedelta(days=5), datetime.min.time()))
+    report("master03", last_monday, ReportStatus.SUBMITTED,
+           work_summary="完成时间戳对齐方案调研报告", next_week_plan="实现原型", self_progress=90,
+           reviewer=users["teacher01"], review_comment="调研较全面，可以进入实现阶段",
+           reviewed_at=datetime.combine(last_monday + timedelta(days=6), datetime.min.time()))
+    report("master04", this_monday, ReportStatus.DRAFT,
+           work_summary="滑模观测器推导进行中", self_progress=15)
+
+    report_count = len(db.new)
+    db.flush()
+    logger.info("weekly_reports: +%d", report_count)
+
     db.commit()
-    logger.info("seed_domain (M2 scope) done")
+    logger.info("seed_domain (M3 scope) done")

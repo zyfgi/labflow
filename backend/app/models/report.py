@@ -1,10 +1,14 @@
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.user import MemberProfile
 
 
 class WeeklyReport(Base, TimestampMixin):
@@ -34,3 +38,5 @@ class WeeklyReport(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    member: Mapped["MemberProfile"] = relationship()
