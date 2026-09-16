@@ -1,10 +1,14 @@
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, utcnow
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class Experiment(Base, TimestampMixin):
@@ -50,6 +54,8 @@ class Experiment(Base, TimestampMixin):
     )
 
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+
+    owner_ref: Mapped["User"] = relationship(foreign_keys=[owner_id])
 
 
 class ExperimentAttachment(Base):

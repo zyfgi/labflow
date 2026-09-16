@@ -71,6 +71,8 @@ class Milestone(Base, TimestampMixin):
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    project: Mapped["Project"] = relationship()
+
 
 class Task(Base, TimestampMixin):
     __tablename__ = "tasks"

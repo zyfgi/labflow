@@ -7,6 +7,7 @@ def register_routers(app: FastAPI) -> None:
     """Register all v1 routers."""
     from app.api.v1 import (
         auth,
+        dashboard,
         equipment,
         experiments,
         learning_plans,
@@ -34,3 +35,4 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(equipment.bookings_router, prefix=api_v1_prefix)
     app.include_router(equipment.borrows_router, prefix=api_v1_prefix)
     app.include_router(equipment.maintenance_router, prefix=api_v1_prefix)
+    app.include_router(dashboard.router, prefix=api_v1_prefix)

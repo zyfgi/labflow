@@ -384,3 +384,47 @@ Result: **64 passed**（新增 7：学生不可改台账/重叠预约 409/相邻
 ## Next Step
 
 Milestone 7：PI/Student Dashboard（全部真实数据）
+
+---
+
+# Milestone 7 — Dashboard
+
+## Completed
+
+- `GET /dashboard/pi`（PI/教师）：8 项 KPI（成员总数/活跃项目/本周周报提交率(已提交+已审核)/进行中任务/逾期任务/本周实验/设备故障/今日预约）+ 项目进度（含负责人设定与任务完成率参考值）+ 成员动态（每人：项目/任务/逾期/周报状态/最近实验）+ 待处理事项（待审周报/待批预约/逾期任务/故障设备/14 天内到期里程碑）+ 最近动态（聚合实验/周报/任务完成/设备事件，全部 SQL 查询）
+- `GET /dashboard/student`：我的任务/逾期/本周周报状态/实验数/未读通知 + 近期预约/实验/项目
+- 无任何硬编码数据；学生访问 PI 看板 403
+- 前端：Dashboard 重写（KPI 卡片、项目进度表 + ECharts 双条形图（人工进度 vs 任务完成率参考）、待办宫格、成员动态表、时间线；学生视图含任务/项目/实验/预约卡）
+
+## Files Changed
+
+- `backend/app/api/v1/dashboard.py`、`app/api/__init__.py`、`app/models/experiment.py`（owner_ref）、`app/models/project.py`（Milestone.project）、`tests/test_dashboard.py`
+- `frontend/src/views/DashboardView.vue`（全量重写）
+
+## API Added
+
+```
+GET /api/v1/dashboard/pi   GET /api/v1/dashboard/student
+```
+
+## Tests
+
+Command: `.venv/Scripts/python -m pytest -q`
+Result: **68 passed**（新增 4：PI 看板结构/学生 403/学生看板任务/未登录 401）
+
+## Manual Verification（真实 HTTP + seed 数据）
+
+```text
+PI: members 12 | rate 33% (3/9) | open 17 | overdue 11 | fault 1 | todo 待审周报3 待批预约4 | activity 10 ✅
+phd01: tasks 3 (overdue 1) | report submitted | experiments 2 | bookings 1 ✅
+学生访问 PI 看板 → 403 ✅
+frontend build ✓ 11.78s（ECharts 正常打包）
+```
+
+## Known Issues
+
+- 无
+
+## Next Step
+
+Milestone 8：Notification API/Search/Export/AuditLog API/due-date checker
