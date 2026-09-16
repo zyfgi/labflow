@@ -109,6 +109,8 @@ class Task(Base, TimestampMixin):
 
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
 
+    project: Mapped["Project"] = relationship()
+
 
 class TaskComment(Base):
     """Comments / activity records shown on the task detail page."""

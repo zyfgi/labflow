@@ -16,6 +16,7 @@
         <el-select v-model="query.status" clearable placeholder="状态" style="width: 130px" @change="load(1)">
           <el-option v-for="(label, key) in REPORT_STATUS_LABELS" :key="key" :label="label" :value="key" />
         </el-select>
+        <ExportButton kind="weekly-reports" />
       </div>
       <el-button
         v-if="!auth.canManage"
@@ -166,6 +167,7 @@ import {
   type WeeklyReport,
 } from '@/api/reports'
 import { REPORT_STATUS_LABELS, REPORT_STATUS_TAGS } from '@/utils/constants'
+import ExportButton from '@/components/ExportButton.vue'
 import { currentWeekStart, formatDateTime, weekEndOf } from '@/utils/datetime'
 import { useAuthStore } from '@/stores/auth'
 import { listMembers, type Member } from '@/api/members'

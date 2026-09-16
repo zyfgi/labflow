@@ -428,3 +428,52 @@ frontend build ✓ 11.78s（ECharts 正常打包）
 ## Next Step
 
 Milestone 8：Notification API/Search/Export/AuditLog API/due-date checker
+
+---
+
+# Milestone 8 — 通知 / 搜索 / 导出 / 审计日志
+
+## Completed
+
+- Notification API：本人列表（unread 统计）、单条已读（只能操作自己的）、全部已读；事件源已在各模块挂接（周报提交/审核/退回、任务分配、任务临近截止、任务逾期、预约通过/拒绝、借用逾期、设备故障、加入项目）
+- 全局搜索 `GET /search?q=`：成员（staff）/项目/任务/实验/设备分类返回，全部走项目级权限过滤
+- 导出 `GET /exports/{kind}?format=csv|xlsx`：成员/周报/任务/设备/预约记录，权限矩阵控制（成员/周报/任务=PI+教师；设备/预约=PI+设备管理员），CSV 带 BOM（Excel 兼容），XLSX 用 openpyxl；导出动作写审计日志
+- AuditLog API：仅 PI 可读，按操作类型筛选
+- due-date checker（`python -m app.due_checker`，可 cron 每日调度）：任务临近截止(3天)/逾期通知、借用逾期标记+通知、过期预约自动完成并回收设备状态；当日去重幂等（修复了本地零点 vs UTC 时间戳混用的 bug）
+- 前端：通知中心页、顶栏通知铃铛（未读角标+预览）、顶栏全局搜索（防抖+分类结果跳转）、操作日志页（PI）、5 个列表页导出按钮
+
+## Files Changed
+
+- `backend/app/api/v1/{notifications,search,exports,audit_logs}.py`、`backend/app/due_checker.py`、`app/api/__init__.py`、`app/models/project.py`（Task.project）、`tests/test_system_features.py`
+- `frontend/src/api/system.ts`、`components/ExportButton.vue`、`views/system/{NotificationsView,AuditLogsView}.vue`、`layouts/MainLayout.vue`、5 个列表页、`router/index.ts`
+
+## API Added
+
+```
+GET /notifications  POST /notifications/{id}/read  POST /notifications/read-all
+GET /search?q=  GET /exports/{kind}?format=csv|xlsx  GET /audit-logs
+```
+
+## Tests
+
+Command: `.venv/Scripts/python -m pytest tests/test_system_features.py -q`
+Result: **8 passed**（通知流/越权读 404/搜索权限/未登录 401/CSV 内容与权限/XLSX 魔数/设备导出角色/审计日志 PI 限定+内容/检查器幂等）
+全套：**76 passed**
+
+## Manual Verification（真实 HTTP）
+
+```text
+admin 通知 → total 2, unread 2, 首条「收到新的周报」✅
+搜索 IMU → tasks 2, experiments 1, equipment 1（双 IMU 测试平台）✅
+导出成员 CSV（UTF-8 BOM）✅；导出任务 XLSX（PK 魔数）✅
+审计日志列出 login/create_project/export_data ✅
+due_checker 真实跑 → task_due_soon 1, task_overdue 11 ✅
+```
+
+## Known Issues
+
+- 无
+
+## Next Step
+
+Milestone 9：文档收尾、安全检查、完整测试、compose 校验、FINAL_REPORT

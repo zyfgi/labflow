@@ -25,6 +25,7 @@
           <el-option v-for="(label, key) in TASK_STATUS_LABELS" :key="key" :label="label" :value="key" />
         </el-select>
         <el-checkbox v-model="query.mine" border @change="load(1)">只看我的</el-checkbox>
+        <ExportButton kind="tasks" />
       </div>
       <div>
         <el-button
@@ -94,6 +95,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { listTasks, type Task } from '@/api/tasks'
 import { listProjects, type Project } from '@/api/projects'
 import { PRIORITY_LABELS, PRIORITY_TAGS, TASK_STATUS_LABELS, TASK_STATUS_TAGS } from '@/utils/constants'
+import ExportButton from '@/components/ExportButton.vue'
 import { formatDate } from '@/utils/datetime'
 import { useAuthStore } from '@/stores/auth'
 import TaskFormDialog from '@/components/TaskFormDialog.vue'

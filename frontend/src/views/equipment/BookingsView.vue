@@ -5,6 +5,7 @@
         <el-option v-for="(label, key) in BOOKING_STATUS_LABELS" :key="key" :label="label" :value="key" />
       </el-select>
       <el-checkbox v-model="query.mine" border @change="load(1)">只看我的</el-checkbox>
+      <ExportButton kind="equipment-bookings" />
     </div>
 
     <el-table v-loading="loading" :data="items" stripe>
@@ -64,6 +65,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { bookingAction, listBookings, type EquipmentBooking } from '@/api/equipment'
 import { BOOKING_STATUS_LABELS, BOOKING_STATUS_TAGS } from '@/utils/constants'
+import ExportButton from '@/components/ExportButton.vue'
 import { formatDateTime } from '@/utils/datetime'
 import { useAuthStore } from '@/stores/auth'
 

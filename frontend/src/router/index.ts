@@ -107,6 +107,18 @@ const router = createRouter({
           meta: { title: '故障维修', menu: 'maintenance' },
         },
         {
+          path: 'notifications',
+          name: 'notifications',
+          component: () => import('@/views/system/NotificationsView.vue'),
+          meta: { title: '通知', menu: 'notifications' },
+        },
+        {
+          path: 'system/audit-logs',
+          name: 'system-audit',
+          component: () => import('@/views/system/AuditLogsView.vue'),
+          meta: { title: '操作日志', menu: 'system-audit', roles: ['PI'] },
+        },
+        {
           path: 'weekly-reports',
           name: 'weekly-reports',
           component: () => import('@/views/report/WeeklyReportsView.vue'),

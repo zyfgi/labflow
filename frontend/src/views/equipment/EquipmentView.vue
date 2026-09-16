@@ -14,6 +14,7 @@
           <el-option v-for="(label, key) in EQUIPMENT_STATUS_LABELS" :key="key" :label="label" :value="key" />
         </el-select>
         <el-button type="primary" plain @click="load(1)">查询</el-button>
+        <ExportButton kind="equipment" />
       </div>
       <el-button v-if="canManage" type="primary" @click="openCreate">新增设备</el-button>
     </div>
@@ -96,6 +97,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { createEquipment, listEquipment, type Equipment } from '@/api/equipment'
 import { EQUIPMENT_STATUS_LABELS, EQUIPMENT_STATUS_TAGS } from '@/utils/constants'
+import ExportButton from '@/components/ExportButton.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()

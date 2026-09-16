@@ -20,7 +20,10 @@
         </el-select>
         <el-button type="primary" plain @click="load(1)">查询</el-button>
       </div>
-      <el-button v-if="auth.isPI" type="primary" @click="dialog.visible = true">添加成员档案</el-button>
+      <div style="display:flex;gap:8px">
+        <ExportButton kind="members" />
+        <el-button v-if="auth.isPI" type="primary" @click="dialog.visible = true">添加成员档案</el-button>
+      </div>
     </div>
 
     <el-table v-loading="loading" :data="items" stripe>
@@ -106,6 +109,7 @@ import { ElMessage } from 'element-plus'
 import { listMembers, type Member } from '@/api/members'
 import { userOptions } from '@/api/auth'
 import { MEMBER_STATUS_LABELS, MEMBER_TYPE_LABELS } from '@/utils/constants'
+import ExportButton from '@/components/ExportButton.vue'
 import { formatDate } from '@/utils/datetime'
 import { useAuthStore } from '@/stores/auth'
 import type { UserOption } from '@/types'
