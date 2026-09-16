@@ -122,3 +122,58 @@ frontend build ✓ 5.40s
 ## Next Step
 
 Milestone 2：Skill/MemberSkill/LearningPlan + 成员列表/详情/技能矩阵/学习计划页面
+
+---
+
+# Milestone 2 — 成员与学习进度
+
+## Completed
+
+- 模型：Skill / MemberSkill（(member_id,skill_id) 唯一）/ LearningPlan；同时完成全部核心域模型建表迁移（projects/milestones/tasks/weekly_reports/experiments/equipment 等一次迁移到位，API 按后续里程碑启用）
+- API：成员列表/详情/更新/overview 聚合、`/members/me`、技能 CRUD、成员技能读写（学生仅限本人）、学习计划 CRUD（学生仅限本人；staff 可查看全部）
+- 权限：学生不能看成员列表/他人档案；只能编辑自己的学习计划与技能（后端强制）
+- seed：10 个技能项 + 53 条成员技能 + 11 条学习计划
+- 前端：成员列表、成员详情（概览/学习计划/技能 Tabs，后续 Tab 占位）、技能矩阵（可点击单元格打分）、学习计划页；路由级角色守卫
+
+## Files Changed
+
+- `backend/app/models/{learning,project,report,experiment,equipment}.py`、`app/models/__init__.py`
+- `backend/app/api/v1/{members,skills,learning_plans}.py`、`app/api/__init__.py`
+- `backend/app/schemas/{member,learning}.py`、`backend/app/permissions/__init__.py`
+- `backend/alembic/versions/771322dcc366_core_domain_tables.py`、`backend/app/seed_data.py`
+- `backend/tests/test_members.py`
+- `frontend/src/api/{members,learning}.ts`、`views/member/{MembersView,MemberDetailView,SkillsMatrixView,LearningPlansView}.vue`、`components/{LearningPlanList,MemberSkillPanel}.vue`、`router/index.ts`
+
+## Database Changes
+
+- 新表：skills / member_skills / learning_plans / projects / project_members / milestones / tasks / weekly_reports / experiments / experiment_attachments / equipment / equipment_bookings / equipment_borrows / equipment_maintenance
+
+## API Added
+
+```
+GET /members  POST /members  GET/PATCH /members/{id}  GET /members/{id}/overview  GET /members/me
+GET/POST /skills   GET/PUT /members/{id}/skills
+GET/POST /learning-plans  PATCH/DELETE /learning-plans/{id}
+```
+
+## Tests
+
+Command: `.venv/Scripts/python -m pytest -q`
+Result: **31 passed**（成员列表权限/他人档案 403/overview、技能 CRUD 与越权、学习计划本人限定/PI 可查可改/非法状态 422）
+
+## Manual Verification（seed 数据，真实 HTTP）
+
+```text
+PI /members → total: 12 ✅
+master01 /learning-plans → 仅自己 2 条计划 ✅
+/skills → 10 项 ✅
+frontend build ✓ 10.88s
+```
+
+## Known Issues
+
+- 成员详情页的周报/项目/任务/实验 Tabs 在对应里程碑完成后启用（当前禁用态占位）
+
+## Next Step
+
+Milestone 3：周报 draft→submit→review→return 闭环 + 通知挂接
