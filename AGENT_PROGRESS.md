@@ -64,3 +64,61 @@ vite build: ✓ built in 9.17s
 ## Next Step
 
 Milestone 1：User/MemberProfile 模型、Alembic、JWT 认证、RBAC、用户管理、登录页、基础 Layout
+
+---
+
+# Milestone 1 — 认证与用户
+
+## Completed
+
+- 模型：`User`、`MemberProfile`（含唯一约束/外键/索引）、`AuditLog`、`Notification`（表已建，M8 启用逻辑）
+- Alembic 初始化 + 初始迁移（已应用到 PostgreSQL 16）
+- JWT 认证（登录/登出/me/改密），登录失败统一提示不泄露用户名是否存在
+- RBAC 依赖（`get_current_user` / `require_roles` / `require_pi` / `require_teacher_or_pi`），全部后端校验
+- 用户管理 API（列表/筛选/分页、创建、详情、更新、角色变更审计）
+- `must_change_password` 首登改密提示
+- seed：12 个账号（1 PI + 1 教师 + 9 学生 + 1 设备管理员）+ MemberProfile
+- 前端：登录页、MainLayout（角色化导航/面包屑/用户菜单）、路由守卫、axios 拦截器（401 跳转）、用户管理页、个人设置页、统一状态色常量
+
+## Files Changed
+
+- `backend/app/models/{base,user,system,enums,__init__}.py` `backend/app/core/{deps,responses}.py`
+- `backend/app/api/v1/{auth,users}.py` `backend/app/api/__init__.py` `backend/app/schemas/user.py`
+- `backend/alembic/`（env.py, script.py.mako, alembic.ini, 初始迁移 `0ee62f05bcbb`）
+- `backend/app/seed.py` `backend/tests/{conftest,test_auth,test_permissions}.py` `backend/pytest.ini`
+- `frontend/src/{api/{client,auth,users}.ts, stores/auth.ts, utils/{constants,datetime}.ts, types/index.ts}`
+- `frontend/src/{layouts/MainLayout.vue, views/{LoginView,DashboardView,ProfileView}.vue, views/system/UsersView.vue, router/index.ts}`
+
+## Database Changes
+
+- 新表：`users` `member_profiles` `audit_logs` `notifications`（唯一约束 username/email、(member_id,week_start) 等后续迁移随模块加入；外键均带索引）
+
+## API Added
+
+```
+POST /api/v1/auth/login | logout   GET /api/v1/auth/me   POST /api/v1/auth/change-password
+GET/POST /api/v1/users   GET/PATCH /api/v1/users/{id}   GET /api/v1/users/options
+```
+
+## Tests
+
+Command: `.venv/Scripts/python -m pytest -q`
+Result: **18 passed**（登录成功/错密码/未知用户同文案/未登录 401/改密流/PI 建用户/重名 409/改角色/学生越权 403/停用账号 401）
+
+## Manual Verification（真实 HTTP，seed 数据）
+
+```text
+admin 登录 → 200 + JWT ✅
+/auth/me → 用户信息 ✅
+错误密码 → 401 {"detail":"用户名或密码错误"} ✅（与未知用户文案一致）
+无 token 访问 /users → 401 ✅
+frontend build ✓ 5.40s
+```
+
+## Known Issues
+
+- pydantic `EmailStr` 拒绝保留域名（.local 等），已换成轻量校验便于校园内网域名
+
+## Next Step
+
+Milestone 2：Skill/MemberSkill/LearningPlan + 成员列表/详情/技能矩阵/学习计划页面
