@@ -477,3 +477,26 @@ due_checker 真实跑 → task_due_soon 1, task_overdue 11 ✅
 ## Next Step
 
 Milestone 9：文档收尾、安全检查、完整测试、compose 校验、FINAL_REPORT
+
+---
+
+# Milestone 9 — 收尾（生产化与文档）
+
+## Completed
+
+- 文档：docs/{architecture,database,api,deployment,backup_restore}.md（含 Mermaid ER 图）、README 校对
+- Alembic 终验：PG `alembic current` = head；fresh DB `upgrade head` 建 20/20 表，无缺失
+- Docker Compose 校验：PyYAML 解析通过；4 服务、postgres 仅绑 127.0.0.1、backend LABFLOW_DEBUG=false、storage 卷挂载、healthcheck 齐备（本机无 Docker，无法实际 up —— 已记录于 FINAL_REPORT §11）
+- 安全检查：.env 被忽略、无真实密钥入库、argon2 哈希、上传白名单+防穿越、鉴权下载、CORS 可配
+- 每日到期检查器交付（`python -m app.due_checker`，幂等）
+- 最终端到端：PRD §47 五组流程全部真实 HTTP 通过（见 FINAL_REPORT §9）
+- 最终完整测试：pytest 76 passed；npm run build 通过
+- FINAL_REPORT.md 生成（真实执行结果）
+
+## Known Issues
+
+见 FINAL_REPORT.md §11（主要为：本机无 Docker 无法 compose up 实测；已用嵌入式 PG 等价验证全部功能）
+
+## Status
+
+**Milestone 0–9 全部完成。**
