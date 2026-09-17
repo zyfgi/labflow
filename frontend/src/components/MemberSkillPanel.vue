@@ -86,7 +86,7 @@ async function save() {
     const items = allSkills.value
       .filter((s) => (draft[s.id] ?? 0) > 0)
       .map((s) => ({ skill_id: s.id, level: draft[s.id] ?? 0, note: draftNotes[s.id] || undefined }))
-    memberSkills.value = await setMemberSkills(props.memberId, items)
+    memberSkills.value = (await setMemberSkills(props.memberId, items)).data.data
     editing.value = false
     ElMessage.success('技能已更新')
   } finally {

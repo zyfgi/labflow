@@ -67,6 +67,11 @@
           <el-menu-item index="maintenance" route="/equipment-maintenance">故障维修</el-menu-item>
         </el-sub-menu>
 
+        <el-menu-item index="ai" route="/ai">
+          <el-icon><MagicStick /></el-icon>
+          <span>AI 助手</span>
+        </el-menu-item>
+
         <el-menu-item index="notifications" route="/notifications">
           <el-icon><Bell /></el-icon>
           <span>通知</span>
@@ -184,6 +189,7 @@ import {
   Bell,
   BellFilled,
   DataAnalysis,
+  MagicStick,
   Monitor,
   Odometer,
   Search,

@@ -65,6 +65,7 @@ const props = defineProps<{
 
 interface Task {
   id: number
+  project_id?: number
   title: string
   description: string | null
   assignee_id: number | null

@@ -70,5 +70,28 @@ Seed 初始密码见 `.env.example` 注释 / `backend/app/seed.py` 顶部说明�
 - `docs/api.md` — API 概览
 - `docs/deployment.md` — 部署说明
 - `docs/backup_restore.md` — 备份恢复
+- `docs/ai-assistant.md` — AI 助手：配置、权限、安全边界
+- `docs/retrieval-architecture.md` — 检索引擎（Search 与 AI 共用）
+- `docs/security.md` — 安全设计
 - `AGENT_PROGRESS.md` — 开发进度记录
 - `FINAL_REPORT.md` — 最终交付报告
+
+## AI 助手（可选）
+
+只读实验室助手：问题 → 本地权限检索 → OpenAI-compatible 模型 → 回答 + 来源链接。
+LLM 只能看见当前用户有权限的数据；API Key 仅保存在后端。
+
+```env
+# .env
+AI_ENABLED=true
+AI_BASE_URL=https://api.deepseek.com/v1   # 或 OpenAI / GLM / Qwen 等任意兼容端点
+AI_API_KEY=sk-...
+AI_MODEL=deepseek-chat
+```
+
+配置后重启 backend，左侧导航出现「AI 助手」。全部说明见 `docs/ai-assistant.md`。
+
+## 生产安全
+
+- 生产启动自动校验配置（DEBUG/SECRET_KEY/DATABASE_URL/AI 配置），不合格直接拒绝启动。
+- 生产环境默认拒绝 demo seed；初始化管理员请使用：`docker compose exec backend python -m app.cli create-admin`。

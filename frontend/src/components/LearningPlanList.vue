@@ -92,7 +92,7 @@ const canEdit = auth.isPI || auth.isTeacher || props.memberId === auth.user?.id
 async function load() {
   loading.value = true
   try {
-    plans.value = await listPlans({ member_id: props.memberId })
+    plans.value = (await listPlans({ member_id: props.memberId })).data.data
   } finally {
     loading.value = false
   }

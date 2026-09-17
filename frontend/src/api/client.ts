@@ -30,14 +30,20 @@ client.interceptors.response.use(
     }
     if (!error.config?.silent) {
       const detail = error.response?.data?.detail
-      const msg =
-        typeof detail === 'string'
-          ? detail
-          : Array.isArray(detail)
-            ? detail[0]?.msg ?? '请求参数错误'
-            : error.message ?? '网络错误'
+      let msg: string
+      if (typeof detail === 'string') {
+        msg = detail
+      } else if (detail && typeof detail === 'object' && 'message' in detail) {
+        // structured AI errors: {code, message}
+        msg = (detail as { message: string }).message
+      } else if (Array.isArray(detail)) {
+        msg = detail[0]?.msg ?? '请求参数错误'
+      } else {
+        msg = error.message ?? '网络错误'
+      }
       ElMessage.error(msg)
     }
+    error.handledCode = error.response?.data?.detail?.code
     return Promise.reject(error)
   },
 )

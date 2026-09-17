@@ -42,6 +42,7 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listNotifications, markRead, readAll, type AppNotification } from '@/api/system'
+import { formatDateTime } from '@/utils/datetime'
 
 const loading = ref(false)
 const items = ref<AppNotification[]>([])

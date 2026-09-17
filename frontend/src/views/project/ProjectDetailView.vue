@@ -166,7 +166,7 @@
       <el-form label-width="80px">
         <el-form-item label="用户" required>
           <el-select v-model="addMember.user_id" filterable style="width: 100%">
-            <el-option v-for="u in userOptions" :key="u.id" :label="`${u.name} (${u.username})`" :value="u.id" />
+            <el-option v-for="u in userOptionsList" :key="u.id" :label="`${u.name} (${u.username})`" :value="u.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="角色">

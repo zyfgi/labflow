@@ -500,3 +500,54 @@ Milestone 9：文档收尾、安全检查、完整测试、compose 校验、FINA
 ## Status
 
 **Milestone 0–9 全部完成。**
+
+---
+
+# 下一阶段 — 代码整改 + AI 助手（无人值守执行记录）
+
+## Phase 1 Baseline
+
+- git clean @ fbb3d87；后端 76 passed；前端 build ✓ 13.49s；alembic = 2085ac133de4
+- 确认问题：Search 存在 Python 逐条 can_read + 每条 db.get(Project) 的 N+1；EQUIPMENT_ADMIN 可访问成员/周报/学习计划；无生产配置校验；seed 无生产守卫；LABFLOW_DEBUG/LABFLOW_SECRET_KEY 环境变量别名未接（compose 的 debug=false 实际未生效）
+
+## Phase 2-3 整改与回归（commit 153a136）
+
+- `app/services/retrieval/access.py`：`visible_project_ids_subquery` / `apply_project_read_scope` / `scoped_tasks_stmt` 统一查询级权限 Scope
+- Search 重写：全 SQL Scope，零 N+1；projects/tasks/experiments 列表复用同一 Scope
+- EQUIPMENT_ADMIN 收紧：成员列表/档案/学习计划/周报模块 403（含周报审核）；设备域不受影响
+- Production fail-fast（DEBUG/SECRET_KEY/SQLite/AI 配置）+ 环境变量别名修复（LABFLOW_DEBUG 等生效）
+- Seed 生产守卫（ALLOW_DEMO_SEED）+ `python -m app.cli create-admin`
+- requirements.lock；新增 15 项 P0 测试 → 全量 91 passed
+
+## Phase 4-8 检索引擎与 AI 后端（commit a03184a）
+
+- Retrieval Engine：types/access/common/entity_resolver/intent_parser/engine + 6 个数据源模块；四层策略（实体解析/规则意图/关键词加权/结构化直查）+ 安全回退召回（实体型与精确 token 查询不回退；日期敏感源保留时间过滤）
+- `/ai/retrieve` 调试端点（dev 开放/production 仅 PI）；`/ai/chat` + 会话 CRUD（严格 user_id 隔离）+ `/ai/status`
+- OpenAICompatibleProvider（httpx，connect 10s/总超时可配，max_retry=1，MockTransport 可测）+ FakeLLMProvider（捕获 messages、可模拟超时/401/429/错误）
+- 数据最小化白名单 context；`<labflow_source>` 边界 + untrusted 系统提示；来源 URL 后端生成
+- 迁移 bf384965486a：ai_conversations / ai_messages / ai_request_logs（fresh DB 23 表全通过）
+- 限流（10/min、100/day，可配，无 Redis）；AIRequestLog + AuditLog（ai_chat/ai_retrieve/ai_provider_error，默认不存问题原文）
+- 测试：retrieval 5 + permissions 6 + chat 9 + provider 10
+
+## Phase 9-10 前端与注入测试
+
+- `/ai` 页面（历史/新对话/消息流/来源卡片可点击/角色推荐问题/错误友好展示）；导航新增「AI 助手」
+- axios 拦截器支持结构化 AI 错误码；AI store（会话状态/发送/加载/删除）
+- 新增 vitest（6 通过）+ typecheck（vue-tsc，0 错误）+ ESLint 未配置（按方案允许）
+- 注入边界测试（指令文本仅作为 source 证据；planner 不携带业务数据）
+
+## Phase 11-13 最终验证
+
+- 后端全量：**121 passed**（2:16）
+- 前端：typecheck exit 0 / vitest 6 passed / build ✓ 14.04s
+- Alembic：PG = bf384965486a head；fresh DB upgrade → 23 表（含 3 张 AI 表）
+- Compose：YAML 解析通过，4 服务、PG 仅绑 127.0.0.1
+- 真实 HTTP E2E：
+  - /ai/retrieve "UKF相关实验结果" → 5 hits（TOP1 命中 UKF-EKF 对比实验，127ms）
+  - 全链路 chat（本地 OpenAI-compatible 桩）→ conversation 持久化、来源 /tasks/2、usage、AIRequestLog(success, latency) 与 AuditLog(ai_chat×2) 全部落库
+  - 第二轮对话复用会话并重新检索；AI 未启用时 503 AI_DISABLED
+- Docker：本机无 Docker 守护进程（V1 已知限制），compose/配置静态校验通过
+
+## Phase 14 文档
+
+- docs/ai-assistant.md、docs/retrieval-architecture.md、docs/security.md；README AI 配置章节；.env.example AI 段

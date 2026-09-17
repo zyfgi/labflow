@@ -50,7 +50,7 @@
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
           <el-tag size="small" :type="MEMBER_STATUS_LABELS[row.status]">
-            {{ { active: '在组', graduated: '已毕业', left: '已离组' }[row.status] ?? row.status }}
+            {{ ({ active: '在组', graduated: '已毕业', left: '已离组' } as Record<string, string>)[row.status] ?? row.status }}
           </el-tag>
         </template>
       </el-table-column>

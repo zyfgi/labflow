@@ -107,6 +107,12 @@ const router = createRouter({
           meta: { title: '故障维修', menu: 'maintenance' },
         },
         {
+          path: 'ai',
+          name: 'ai-assistant',
+          component: () => import('@/views/ai/AIAssistantView.vue'),
+          meta: { title: 'AI 助手', menu: 'ai' },
+        },
+        {
           path: 'notifications',
           name: 'notifications',
           component: () => import('@/views/system/NotificationsView.vue'),
