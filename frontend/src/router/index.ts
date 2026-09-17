@@ -20,7 +20,7 @@ const router = createRouter({
           path: 'members',
           name: 'members',
           component: () => import('@/views/member/MembersView.vue'),
-          meta: { title: '成员列表', menu: 'member-list', roles: ['PI', 'TEACHER', 'EQUIPMENT_ADMIN'] },
+          meta: { title: '成员列表', menu: 'member-list', roles: ['PI', 'TEACHER'] },
         },
         {
           path: 'members/:id',

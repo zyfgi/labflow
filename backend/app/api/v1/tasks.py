@@ -11,6 +11,7 @@ from app.models.base import utcnow
 from app.models.project import Project, Task, TaskComment
 from app.models.user import User
 from app.permissions.projects import ensure_project_manageable, ensure_project_visible
+from app.services.retrieval.access import visible_project_ids_subquery
 from app.schemas.project import (
     TaskCommentCreate,
     TaskCommentOut,
@@ -66,29 +67,17 @@ def list_tasks(
     if assignee_id:
         stmt = stmt.where(Task.assignee_id == assignee_id)
 
-    visible_projects: list[int] | None = None
-    if user.role != "PI":
-        # students can only see tasks of visible projects (or assigned to them)
-        from app.models.project import ProjectMember
-
-        member_ids = list(
-            db.scalars(
-                select(ProjectMember.project_id).where(
-                    ProjectMember.user_id == user.id, ProjectMember.left_at.is_(None)
-                )
-            )
-        )
-        visible_projects = member_ids
-
     if project_id:
         if user.role != "PI":
             proj = db.get(Project, project_id)
             if proj:
                 ensure_project_visible(db, user, proj)
         stmt = stmt.where(Task.project_id == project_id)
-    elif visible_projects is not None:
+    else:
+        # shared permission scope: own tasks OR tasks in readable projects
         stmt = stmt.where(
-            (Task.project_id.in_(visible_projects or [0])) | (Task.assignee_id == user.id)
+            (Task.assignee_id == user.id)
+            | Task.project_id.in_(visible_project_ids_subquery(user))
         )
 
     if status:

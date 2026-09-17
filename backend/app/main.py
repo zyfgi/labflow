@@ -5,6 +5,8 @@ from app.core.config import settings
 
 
 def create_app() -> FastAPI:
+    settings.validate_production()
+
     app = FastAPI(
         title=settings.APP_NAME,
         version="1.0.0",

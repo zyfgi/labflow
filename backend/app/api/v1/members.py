@@ -68,7 +68,7 @@ def list_members(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    if not is_staff(user):
+    if user.role == Role.EQUIPMENT_ADMIN or not is_staff(user):
         raise HTTPException(status_code=403, detail="没有查看成员列表的权限")
     stmt = select(MemberProfile).options(joinedload(MemberProfile.user))
     if member_type:

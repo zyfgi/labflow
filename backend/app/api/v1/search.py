@@ -1,7 +1,12 @@
-"""Global search across members / projects / tasks / experiments / equipment."""
+"""Global search backed by the shared permission scopes.
+
+All permission filtering is pushed into SQL (no Python can_read loops, no
+per-result project lookups). This is the same scope layer the AI retrieval
+engine uses, so search and AI can never diverge on permissions.
+"""
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user
@@ -9,10 +14,13 @@ from app.core.responses import ok
 from app.database import get_db
 from app.models.equipment import Equipment
 from app.models.experiment import Experiment
-from app.models.project import Project, ProjectMember, Task
+from app.models.project import Project, Task
 from app.models.user import MemberProfile, User
-from app.permissions import is_staff
-from app.permissions.projects import can_read_project
+from app.services.retrieval.access import (
+    apply_project_read_scope,
+    is_teaching_staff,
+    visible_project_ids_subquery,
+)
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -24,15 +32,25 @@ def global_search(
     db: Session = Depends(get_db),
 ) -> dict:
     kw = f"%{q}%"
-    results: dict[str, list] = {"members": [], "projects": [], "tasks": [], "experiments": [], "equipment": []}
+    results: dict[str, list] = {
+        "members": [],
+        "projects": [],
+        "tasks": [],
+        "experiments": [],
+        "equipment": [],
+    }
 
-    # members: staff only
-    if is_staff(user):
+    # members: PI / TEACHER only (equipment admins have no member-data access)
+    if is_teaching_staff(user):
         rows = db.scalars(
             select(MemberProfile)
             .options(joinedload(MemberProfile.user))
             .join(User, MemberProfile.user_id == User.id)
-            .where(User.name.ilike(kw) | User.username.ilike(kw) | MemberProfile.student_no.ilike(kw))
+            .where(
+                User.name.ilike(kw)
+                | User.username.ilike(kw)
+                | MemberProfile.student_no.ilike(kw)
+            )
             .limit(5)
         ).all()
         results["members"] = [
@@ -40,65 +58,61 @@ def global_search(
             for m in rows
         ]
 
-    # projects: respect visibility
-    stmt = select(Project).where(
-        Project.deleted_at.is_(None),
-        (Project.name.ilike(kw) | Project.code.ilike(kw)),
-    )
-    projects = db.scalars(stmt.order_by(Project.updated_at.desc()).limit(20)).all()
-    visible = [p for p in projects if can_read_project(db, user, p)][:5]
+    # projects: permission scope in SQL, then rank + limit
+    proj_stmt = apply_project_read_scope(
+        select(Project).where(Project.name.ilike(kw) | Project.code.ilike(kw)), user, Project.id
+    ).order_by(Project.updated_at.desc())
+    projects = db.scalars(proj_stmt.limit(5)).all()
     results["projects"] = [
-        {"id": p.id, "name": p.name, "code": p.code, "status": p.status} for p in visible
+        {"id": p.id, "name": p.name, "code": p.code, "status": p.status} for p in projects
     ]
 
-    # tasks: in readable projects or assigned to me
+    # tasks: assignee OR readable projects, ranked in SQL
+    task_scope = (Task.assignee_id == user.id) | Task.project_id.in_(
+        visible_project_ids_subquery(user)
+    )
     tasks = db.scalars(
-        select(Task).where(Task.deleted_at.is_(None), Task.title.ilike(kw)).limit(20)
+        select(Task)
+        .where(
+            Task.deleted_at.is_(None),
+            task_scope,
+            Task.title.ilike(kw),
+        )
+        .order_by(Task.updated_at.desc())
+        .limit(5)
     ).all()
-    visible_tasks = []
-    for t in tasks:
-        if t.assignee_id == user.id:
-            visible_tasks.append(t)
-            continue
-        project = db.get(Project, t.project_id)
-        if project and can_read_project(db, user, project):
-            visible_tasks.append(t)
-        if len(visible_tasks) >= 5:
-            break
     results["tasks"] = [
         {"id": t.id, "title": t.title, "status": t.status, "project_id": t.project_id}
-        for t in visible_tasks
+        for t in tasks
     ]
 
-    # experiments: readable projects only (query via experiment no / title)
-    exp_stmt = select(Project.id).where(Project.deleted_at.is_(None))
-    experiments = db.scalars(
+    # experiments: project scope only
+    exp_stmt = apply_project_read_scope(
         select(Experiment).where(
             Experiment.deleted_at.is_(None),
             Experiment.experiment_no.ilike(kw) | Experiment.title.ilike(kw),
-        ).limit(20)
-    ).all()
-    visible_exps = []
-    for e in experiments:
-        project = db.get(Project, e.project_id)
-        if project and can_read_project(db, user, project):
-            visible_exps.append(e)
-        if len(visible_exps) >= 5:
-            break
+        ),
+        user,
+        Experiment.project_id,
+    ).order_by(Experiment.experiment_date.desc().nullslast())
+    experiments = db.scalars(exp_stmt.limit(5)).all()
     results["experiments"] = [
         {"id": e.id, "experiment_no": e.experiment_no, "title": e.title, "status": e.status}
-        for e in visible_exps
+        for e in experiments
     ]
 
-    # equipment: any member can see the ledger
+    # equipment: visible to any authenticated member
     equipment_rows = db.scalars(
-        select(Equipment).where(
+        select(Equipment)
+        .where(
             Equipment.deleted_at.is_(None),
             Equipment.name.ilike(kw) | Equipment.asset_no.ilike(kw),
-        ).limit(5)
+        )
+        .limit(5)
     ).all()
     results["equipment"] = [
-        {"id": e.id, "name": e.name, "asset_no": e.asset_no, "status": e.status} for e in equipment_rows
+        {"id": e.id, "name": e.name, "asset_no": e.asset_no, "status": e.status}
+        for e in equipment_rows
     ]
 
     return ok(results)

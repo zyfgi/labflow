@@ -1,4 +1,10 @@
-"""Project-level resource permission helpers (RBAC + resource ownership)."""
+"""Project-level resource permission helpers (RBAC + resource ownership).
+
+Member-development data (member profiles, learning plans, skills, weekly
+reports, research progress) is restricted to PI / TEACHER. The equipment
+admin role only manages equipment-domain endpoints; for display names it
+receives bare `user_id`/`name` via existing joins, never full profiles.
+"""
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -6,7 +12,10 @@ from sqlalchemy.orm import Session
 from app.models.enums import Role
 from app.models.user import MemberProfile, User
 
-STAFF_ROLES = (Role.PI, Role.TEACHER, Role.EQUIPMENT_ADMIN)
+# roles allowed to see member-development data
+TEACHING_STAFF_ROLES = (Role.PI, Role.TEACHER)
+# legacy alias used across modules; EQUIPMENT_ADMIN intentionally excluded
+STAFF_ROLES = TEACHING_STAFF_ROLES
 
 
 def get_member_profile(db: Session, user: User) -> MemberProfile | None:
@@ -20,7 +29,7 @@ def require_member_profile(user: User) -> MemberProfile:
 
 
 def can_view_member(user: User, member: MemberProfile) -> bool:
-    if user.role in STAFF_ROLES:
+    if user.role in TEACHING_STAFF_ROLES:
         return True
     return user.member_profile is not None and user.member_profile.id == member.id
 

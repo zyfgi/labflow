@@ -75,6 +75,8 @@ def list_reports(
 ) -> dict:
     if status and status not in REPORT_STATUSES:
         raise HTTPException(status_code=400, detail="无效的周报状态")
+    if user.role == Role.EQUIPMENT_ADMIN:
+        raise HTTPException(status_code=403, detail="设备管理员无权访问周报模块")
     if not is_staff(user):
         profile = user.member_profile
         if not profile:
@@ -221,7 +223,7 @@ def review_report(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    if not is_staff(user) or user.role == Role.EQUIPMENT_ADMIN:
+    if not is_staff(user):
         raise HTTPException(status_code=403, detail="只有 PI/教师可以审核周报")
     report = _get_report(db, report_id)
     if report.status != ReportStatus.SUBMITTED:
@@ -252,7 +254,7 @@ def return_report(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    if not is_staff(user) or user.role == Role.EQUIPMENT_ADMIN:
+    if not is_staff(user):
         raise HTTPException(status_code=403, detail="只有 PI/教师可以退回周报")
     report = _get_report(db, report_id)
     if report.status != ReportStatus.SUBMITTED:

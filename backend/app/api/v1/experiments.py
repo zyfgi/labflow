@@ -13,6 +13,7 @@ from app.models.project import Project
 from app.models.user import User
 from app.permissions.projects import can_manage_project, can_read_project
 from app.schemas.experiment import ExperimentCreate, ExperimentOut, ExperimentUpdate
+from app.services.retrieval.access import visible_project_ids_subquery
 from app.storage import storage_service
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
@@ -99,25 +100,11 @@ def list_experiments(
         if not project or not can_read_project(db, user, project):
             raise HTTPException(status_code=403, detail="没有查看该项目的权限")
         stmt = stmt.where(Experiment.project_id == project_id)
-    elif user.role != "PI":
-        from sqlalchemy.orm import aliased
-
-        # only experiments in readable projects (lab visibility + membership)
-        from app.models.project import ProjectMember
-
-        member_ids = list(
-            db.scalars(
-                select(ProjectMember.project_id).where(
-                    ProjectMember.user_id == user.id, ProjectMember.left_at.is_(None)
-                )
-            )
+    else:
+        # shared permission scope, pushed into SQL
+        stmt = stmt.where(
+            Experiment.project_id.in_(visible_project_ids_subquery(user))
         )
-        readable = select(Project.id).where(
-            (Project.id.in_(member_ids or [0]))
-            | (Project.owner_id == user.id)
-            | (Project.visibility == "lab")
-        )
-        stmt = stmt.where(Experiment.project_id.in_(readable))
 
     if status:
         stmt = stmt.where(Experiment.status == status)

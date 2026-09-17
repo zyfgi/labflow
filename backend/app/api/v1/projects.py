@@ -12,6 +12,7 @@ from app.permissions.projects import (
     ensure_project_visible,
     is_project_member,
 )
+from app.services.retrieval.access import visible_project_ids_subquery
 from app.schemas.project import (
     MilestoneCreate,
     MilestoneOut,
@@ -57,24 +58,7 @@ def list_projects(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    stmt = select(Project).where(Project.deleted_at.is_(None))
-    if user.role != "PI":
-        if user.role == "GUEST":
-            member_ids: list[int] = []
-            lab_visible = False
-        else:
-            member_ids = list(
-                db.scalars(
-                    select(ProjectMember.project_id).where(
-                        ProjectMember.user_id == user.id, ProjectMember.left_at.is_(None)
-                    )
-                )
-            )
-            lab_visible = True
-        conditions = Project.id.in_(member_ids or [0]) | (Project.owner_id == user.id)
-        if lab_visible:
-            conditions = conditions | (Project.visibility == "lab")
-        stmt = stmt.where(conditions)
+    stmt = select(Project).where(Project.id.in_(visible_project_ids_subquery(user)))
     if mine:
         stmt = stmt.where(Project.owner_id == user.id)
     if status:

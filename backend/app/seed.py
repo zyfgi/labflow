@@ -13,6 +13,7 @@ first login. Do not reuse these in production.
 """
 
 import logging
+import sys
 from datetime import date, timedelta
 
 from sqlalchemy import select
@@ -80,6 +81,17 @@ def seed_users(db: Session) -> dict[str, User]:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+    from app.core.config import settings
+
+    if not settings.effective_allow_demo_seed:
+        logger.error(
+            "Demo seed 在生产环境默认禁用（ENV=production）。"
+            "如确需演示数据请显式设置 ALLOW_DEMO_SEED=true；"
+            "生产管理员请使用: python -m app.cli create-admin"
+        )
+        sys.exit(1)
+
     Base.metadata.create_all(engine)  # safety net; alembic is the real path
     with SessionLocal() as db:
         users = seed_users(db)

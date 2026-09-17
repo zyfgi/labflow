@@ -58,6 +58,8 @@ def list_plans(
     db: Session = Depends(get_db),
 ) -> dict:
     query_member_id = member_id
+    if user.role == "EQUIPMENT_ADMIN":
+        raise HTTPException(status_code=403, detail="设备管理员无权访问学习计划模块")
     if not is_staff(user):
         profile = user.member_profile
         if not profile:
