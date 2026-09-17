@@ -19,6 +19,8 @@ _tmpdir = tempfile.mkdtemp(prefix="labflow_test_")
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmpdir}/test.db"
 os.environ["UPLOAD_DIR"] = os.path.join(_tmpdir, "storage")
 os.environ["LABFLOW_SECRET_KEY"] = "test-secret-key-not-for-production"
+os.environ["AI_RATE_LIMIT_PER_MINUTE"] = "1000"
+os.environ["AI_RATE_LIMIT_PER_DAY"] = "10000"
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402

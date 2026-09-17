@@ -1,0 +1,212 @@
+"""Equipment / maintenance / booking retrieval (visible to lab members)."""
+
+from datetime import date
+
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session, joinedload
+
+from app.models.equipment import Equipment, EquipmentBooking, EquipmentMaintenance
+from app.models.user import User
+from app.services.retrieval.common import time_range, truncate
+from app.services.retrieval.entity_resolver import ResolvedEntities
+from app.services.retrieval.types import RetrievalHit, RetrievalPlan
+
+
+def search_equipment(
+    db: Session,
+    user: User,
+    plan: RetrievalPlan,
+    entities: ResolvedEntities,
+    limit: int = 5,
+    use_keywords: bool = True,
+) -> list[RetrievalHit]:
+    stmt = select(Equipment).where(Equipment.deleted_at.is_(None))
+    if entities.equipment:
+        stmt = stmt.where(Equipment.id == entities.equipment.id)
+
+    keywords = [k for k in plan.keywords if k]
+    if keywords and use_keywords and not entities.found:
+        fields = (Equipment.name, Equipment.asset_no, Equipment.model, Equipment.category, Equipment.location)
+        stmt = stmt.where(or_(*(or_(*(f.ilike(f"%{kw}%") for f in fields)) for kw in keywords)))
+
+    rows = db.scalars(stmt.limit(limit * 2)).all()
+    hits: list[RetrievalHit] = []
+    today = date.today()
+    for e in rows:
+        score = 1.0
+        for kw in keywords:
+            if kw.lower() in (e.name or "").lower() or kw.lower() in (e.asset_no or "").lower():
+                score += 5
+            if e.model and kw.lower() in e.model.lower():
+                score += 2
+        if entities.equipment and e.id == entities.equipment.id:
+            score += 5
+        manager = db.get(User, e.manager_id) if e.manager_id else None
+        hits.append(
+            RetrievalHit(
+                source_type="equipment",
+                source_id=e.id,
+                title=f"{e.name} ({e.asset_no})",
+                excerpt=truncate(
+                    f"状态 {e.status} · 位置 {e.location or '未知'} · 型号 {e.model or '-'}"
+                ),
+                score=score,
+                url=f"/equipment/{e.id}",
+                project_id=None,
+                occurred_at=None,
+                metadata={
+                    "status": e.status,
+                    "category": e.category,
+                    "location": e.location,
+                    "manager_name": manager.name if manager else None,
+                    "model": e.model,
+                    "as_of": today.isoformat(),
+                    "context": {
+                        "asset_no": e.asset_no,
+                        "name": e.name,
+                        "category": e.category,
+                        "model": e.model,
+                        "location": e.location,
+                        "status": e.status,
+                        "manager_name": manager.name if manager else None,
+                    },
+                },
+            )
+        )
+    hits.sort(key=lambda h: h.score, reverse=True)
+    return hits[:limit]
+
+
+def search_maintenance(
+    db: Session,
+    user: User,
+    plan: RetrievalPlan,
+    entities: ResolvedEntities,
+    limit: int = 5,
+    use_keywords: bool = True,
+) -> list[RetrievalHit]:
+    stmt = (
+        select(EquipmentMaintenance)
+        .join(Equipment, EquipmentMaintenance.equipment_id == Equipment.id)
+        .where(Equipment.deleted_at.is_(None))
+    )
+    if entities.equipment:
+        stmt = stmt.where(EquipmentMaintenance.equipment_id == entities.equipment.id)
+
+    keywords = [k for k in plan.keywords if k]
+    if keywords and use_keywords and not entities.equipment:
+        fields = (EquipmentMaintenance.description, EquipmentMaintenance.result, EquipmentMaintenance.vendor)
+        stmt = stmt.where(or_(*(or_(*(f.ilike(f"%{kw}%") for f in fields)) for kw in keywords)))
+
+    date_from, date_to = time_range(plan.time_preset)
+    if date_from:
+        stmt = stmt.where(EquipmentMaintenance.reported_at >= date_from)
+    if date_to:
+        stmt = stmt.where(EquipmentMaintenance.reported_at <= date_to)
+
+    rows = db.scalars(
+        stmt.order_by(EquipmentMaintenance.reported_at.desc()).limit(limit * 2)
+    ).all()
+    hits: list[RetrievalHit] = []
+    for m in rows:
+        eq = db.get(Equipment, m.equipment_id)
+        score = 2.0
+        for kw in keywords:
+            if m.description and kw.lower() in m.description.lower():
+                score += 3
+            if m.result and kw.lower() in m.result.lower():
+                score += 3
+        if entities.equipment and m.equipment_id == entities.equipment.id:
+            score += 4
+        hits.append(
+            RetrievalHit(
+                source_type="maintenance",
+                source_id=m.id,
+                title=f"维修记录：{eq.name if eq else m.equipment_id}（{m.type}）",
+                excerpt=truncate(
+                    f"状态 {m.status} · {m.description or ''} {m.result or ''}"
+                ),
+                score=score,
+                url=f"/equipment/{m.equipment_id}",
+                project_id=None,
+                occurred_at=m.reported_at,
+                metadata={
+                    "equipment_name": eq.name if eq else None,
+                    "maintenance_status": m.status,
+                    "vendor": m.vendor,
+                    "result": truncate(m.result, 120) or None,
+                    "context": {
+                        "equipment_name": eq.name if eq else None,
+                        "type": m.type,
+                        "description": truncate(m.description, 400),
+                        "status": m.status,
+                        "reported_at": m.reported_at.isoformat() if m.reported_at else None,
+                        "finished_at": m.finished_at.isoformat() if m.finished_at else None,
+                        "result": truncate(m.result, 300),
+                    },
+                },
+            )
+        )
+    hits.sort(key=lambda h: h.score, reverse=True)
+    return hits[:limit]
+
+
+def search_bookings(
+    db: Session,
+    user: User,
+    plan: RetrievalPlan,
+    entities: ResolvedEntities,
+    limit: int = 5,
+    use_keywords: bool = True,
+) -> list[RetrievalHit]:
+    """Booking visibility: staff/equipment-admin see all; others see only own."""
+    from app.services.retrieval.access import TEACHING_STAFF_ROLES
+
+    stmt = (
+        select(EquipmentBooking)
+        .join(Equipment, EquipmentBooking.equipment_id == Equipment.id)
+        .where(Equipment.deleted_at.is_(None))
+        .options(joinedload(EquipmentBooking.user))
+    )
+    if user.role not in TEACHING_STAFF_ROLES and user.role != "EQUIPMENT_ADMIN":
+        stmt = stmt.where(EquipmentBooking.user_id == user.id)
+    if plan.mine_only:
+        stmt = stmt.where(EquipmentBooking.user_id == user.id)
+    if entities.equipment:
+        stmt = stmt.where(EquipmentBooking.equipment_id == entities.equipment.id)
+
+    date_from, date_to = time_range(plan.time_preset)
+    if date_from:
+        stmt = stmt.where(EquipmentBooking.start_time >= date_from)
+    if date_to:
+        stmt = stmt.where(EquipmentBooking.start_time <= f"{date_to} 23:59:59")
+
+    rows = db.scalars(stmt.order_by(EquipmentBooking.start_time.desc()).limit(limit * 2)).all()
+    hits: list[RetrievalHit] = []
+    for b in rows:
+        eq = db.get(Equipment, b.equipment_id)
+        score = 2.0
+        if entities.equipment and b.equipment_id == entities.equipment.id:
+            score += 4
+        hits.append(
+            RetrievalHit(
+                source_type="booking",
+                source_id=b.id,
+                title=f"预约：{eq.name if eq else b.equipment_id}",
+                excerpt=truncate(
+                    f"{b.start_time.strftime('%m-%d %H:%M')} ~ {b.end_time.strftime('%m-%d %H:%M')} · "
+                    f"{b.user.name if b.user else ''} · {b.purpose or ''} · {b.status}"
+                ),
+                score=score,
+                url="/equipment-bookings",
+                project_id=b.project_id,
+                occurred_at=b.start_time,
+                metadata={
+                    "booking_status": b.status,
+                    "equipment_name": eq.name if eq else None,
+                    "user_name": b.user.name if b.user else None,
+                },
+            )
+        )
+    hits.sort(key=lambda h: h.score, reverse=True)
+    return hits[:limit]

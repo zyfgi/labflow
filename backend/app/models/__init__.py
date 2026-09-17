@@ -1,6 +1,7 @@
 """Import all models so Base.metadata is complete for Alembic and tests."""
 
 from app.database import Base
+from app.models.ai import AIConversation, AIMessage, AIRequestLog
 from app.models.equipment import (
     Equipment,
     EquipmentBooking,
@@ -15,6 +16,9 @@ from app.models.system import AuditLog, Notification
 from app.models.user import MemberProfile, User
 
 __all__ = [
+    "AIConversation",
+    "AIMessage",
+    "AIRequestLog",
     "AuditLog",
     "Base",
     "Equipment",

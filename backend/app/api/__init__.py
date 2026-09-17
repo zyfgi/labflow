@@ -6,6 +6,7 @@ api_v1_prefix = "/api/v1"
 def register_routers(app: FastAPI) -> None:
     """Register all v1 routers."""
     from app.api.v1 import (
+        ai,
         audit_logs,
         auth,
         dashboard,
@@ -44,3 +45,4 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(search.router, prefix=api_v1_prefix)
     app.include_router(exports.router, prefix=api_v1_prefix)
     app.include_router(audit_logs.router, prefix=api_v1_prefix)
+    app.include_router(ai.router, prefix=api_v1_prefix)
