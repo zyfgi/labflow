@@ -170,3 +170,135 @@ df26b63 feat: experiment management
 219fa5a feat: notifications search and export
 <final> chore: production hardening and documentation
 ```
+
+---
+
+# 下一阶段报告：代码整改 + 实验室 AI 助手
+
+> 执行模式：一次性无人值守（Phase 1–14）。所有结果为真实执行记录。
+
+## 1. 原始 baseline
+
+- git clean @ fbb3d87；后端 76 passed（86s）；前端 build ✓ 13.49s；alembic = 2085ac133de4；无 typecheck/lint/test 配置
+- 本机无 Docker（延续 V1 限制）
+
+## 2. 发现的问题（整改前代码审查）
+
+1. `/search`：先 LIMIT 候选 → Python 循环 can_read → 再过滤截断；Task/Experiment 每条 `db.get(Project)` → N+1、候选窗口被无权限结果占用
+2. EQUIPMENT_ADMIN 被视为 staff：可看成员档案/学习计划/技能/周报并参与周报审核
+3. 无生产配置校验；且 compose 传的 `LABFLOW_DEBUG=false` 因缺少环境变量别名映射实际未生效
+4. seed 在生产可用固定 demo 密码；无独立 create-admin
+5. 权限条件在 projects/tasks/experiments/search 各自复制，AI 接入会扩大风险
+
+## 3. 修复的问题
+
+以上 5 项全部修复：统一 Scope（access.py）+ Search/列表/导出复用；设备管理员成员域 403；production fail-fast + 环境别名；ALLOW_DEMO_SEED + `python -m app.cli create-admin`；新增 15 项 P0 测试。
+
+## 4. 修改的架构
+
+新增两层：`services/retrieval/`（Search 与 AI 共用的权限检索引擎）与 `services/ai/`
+（provider 抽象 / prompts / context builder / 限流 / 编排）。AI 数据流：
+问题 → (可选 LLM Planner，仅问题文本) → SQL 级权限检索 → 白名单字段上下文（≤30k 字符）
+→ OpenAI-compatible API → 回答 + 后端生成来源链接。LLM 无数据库访问、无独立权限、只读。
+
+## 5. 数据库 migrations
+
+`bf384965486a`：ai_conversations / ai_messages / ai_request_logs（含 downgrade）；
+fresh DB `upgrade head` → 23 表全部建立（含升级前后校验）。
+
+## 6. 新 API
+
+```
+POST /api/v1/ai/chat          POST /api/v1/ai/retrieve（调试，dev 开放/生产仅 PI）
+GET/POST /api/v1/ai/conversations   GET/DELETE /api/v1/ai/conversations/{id}   GET /api/v1/ai/status
+```
+
+## 7. Retrieval Engine 设计
+
+四层：实体解析（DB 实体名回查问题）→ 规则意图（12 类 intent + 7 种时间预设 + mine_only）
+→ 关键词 ILIKE 加权（编号+6/标题+4/结论+3/方法+2；CJK 2-gram）→ 结构化直查（逾期任务等）。
+安全回退：仅开放性自然语言问题在关键词 0 命中时按 Scope 宽松召回；实体指向/精确 token 查询不回退；
+日期敏感源保留时间过滤。权限全部在 SQL Scope 内（与 Search/列表/导出共享 access.py）。
+详见 `docs/retrieval-architecture.md`。
+
+## 8. AI Provider 设计
+
+`LLMProvider` Protocol + `OpenAICompatibleProvider`（httpx；connect 10s、总超时 AI_TIMEOUT_SECONDS；
+401/403→AUTH、429→RATE_LIMIT、5xx→ERROR、超时→TIMEOUT、解析失败→RESPONSE_INVALID）+
+`FakeLLMProvider`（捕获 messages，可注入错误）。切换厂商只改 AI_BASE_URL/AI_API_KEY/AI_MODEL。
+限流 10/min + 100/day（应用内，可配）。
+
+## 9. AI Assistant 页面
+
+`/ai`：左侧历史对话（新建/删除/切换），右侧消息流 + 来源卡片（点击跳转原始页面）+
+角色化推荐问题 + 友好错误展示；导航新增「AI 助手」。构建通过（见下）。
+
+## 10. 权限测试
+
+- `tests/test_p0_hardening.py`（15）：设备管理员访问成员/学习计划/周报/审核一律 403、设备域 201/200
+- `tests/test_ai_permissions.py`（6）：Project B private + Student A 越权全套（见 §11）
+- Search Scope 回归：学生搜索私项目编号 → 0 结果；PI → 命中
+
+## 11. 敏感数据泄漏测试（P0）
+
+`SECRET_PROJECT_B_TOKEN_9F83A` 埋入 Project B 的 description/task.description/experiment.conclusion：
+
+```text
+/search?q=<token>（Student A）        → 全部分类 0 结果 ✅
+/ai/retrieve q=<token>（Student A）   → 0 hits（PI 控制组 >0，证明数据存在）✅
+FakeLLMProvider 捕获全部 messages     → 不包含 token（Student A 广泛提问）✅
+Student B 周报私有内容                → 不进入 Student A 的 LLM context ✅
+响应中无"无权限"侧信道措辞 ✅
+```
+
+## 12. Prompt Injection 测试
+
+实验 conclusion 写入 "Ignore previous instructions..."：仅以 `<labflow_source>` 证据形式出现在
+chat 上下文中；System Prompt 含 untrusted 声明；planner 调用零业务数据；私有项目 token 不出现。
+
+## 13. Backend pytest 结果
+
+```text
+command: pytest -q        result: 121 passed（2:16）
+（baseline 76 → 整改 91 → AI 阶段 121）
+```
+
+## 14-15. Frontend typecheck / build 结果
+
+```text
+command: npm run typecheck   result: exit 0（0 错误，vue-tsc）
+command: npx vitest run      result: 6 passed（AI store/api/来源渲染/会话状态）
+command: npm run build       result: ✓ built in 14.04s
+```
+
+## 16. Docker 结果
+
+本机无 Docker 守护进程（无法 compose build/up —— 与 V1 相同的环境限制）。
+compose YAML 解析通过：4 服务、postgres 仅绑 127.0.0.1、backend healthcheck、
+生产 debug=false。本地以「嵌入式 PG 16 + uvicorn + Vite + 本地 OpenAI-compatible 桩」完成等价 E2E。
+
+## 17. E2E 结果（真实 HTTP）
+
+```text
+/ai/retrieve "UKF相关实验结果"        → 5 hits，TOP1=UKF-EKF 低附着对比实验（127ms）
+/ai/chat（桩模型，完整链路）           → conversation_id=1 持久化、回答、来源 [/tasks/2]、usage tokens
+第二轮对话（conversation_id=1 复用）   → 每轮重新检索（AIRequestLog 两条 success，latency 339/44ms）
+落库验证                              → ai_conversations/ai_messages/ai_request_logs + AuditLog ai_chat×2
+AI 未启用                             → 503 {"code":"AI_DISABLED"}（前端显示友好文案）
+```
+
+## 18. 当前已知问题
+
+1. Docker 本机不可用（环境限制）；compose 交付并静态校验。
+2. Query Planner 依赖模型输出受限 JSON，弱模型下可能频繁回退规则解析（不影响可用性）。
+3. 检索为 ILIKE 子串匹配，未做分词/语义检索（按方案 V1 不引入向量库）。
+4. 限流为单实例内存实现，多实例部署需换 Redis。
+
+## 19. 未完成项
+
+无（方案 §66 完成定义逐项达成）。SSE 流式输出按方案建议留待后续（权限>检索>回答>来源>streaming）。
+
+## 20. 后续 V2 建议
+
+pgvector 附件/知识库语义检索；SSE 流式；AI 会话管理页（重命名/置顶）；
+按角色的 AI 使用统计面板；多实例 Redis 限流；检索召回评测集自动化。
