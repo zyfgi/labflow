@@ -1,14 +1,13 @@
 """Task retrieval (scope: assignee OR readable projects — always in SQL)."""
 
-from datetime import date
-
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.project import Project, Task
 from app.models.user import User
-from app.services.retrieval.access import visible_project_ids_subquery
-from app.services.retrieval.common import time_range, truncate
+from app.permissions.projects import visible_task_scope_conditions
+from app.core.time import app_today, time_range
+from app.services.retrieval.common import truncate
 from app.services.retrieval.entity_resolver import ResolvedEntities
 from app.services.retrieval.types import RetrievalHit, RetrievalPlan
 
@@ -27,7 +26,7 @@ def search_tasks(
 ) -> list[RetrievalHit]:
     stmt = select(Task).where(
         Task.deleted_at.is_(None),
-        (Task.assignee_id == user.id) | Task.project_id.in_(visible_project_ids_subquery(user)),
+        visible_task_scope_conditions(user),
     )
 
     assignee_id: int | None
@@ -44,7 +43,7 @@ def search_tasks(
         stmt = stmt.where(Task.project_id == entities.project.id)
 
     if plan.intent == "overdue_tasks":
-        today = date.today()
+        today = app_today()
         stmt = stmt.where(
             Task.status.in_(_OPEN),
             Task.due_date.is_not(None),
@@ -79,7 +78,7 @@ def search_tasks(
         for u in db.scalars(select(User).where(User.id.in_(assignee_ids))).all():
             user_names[u.id] = u.name
 
-    today = date.today()
+    today = app_today()
     hits: list[RetrievalHit] = []
     for t in rows:
         score = 1.0

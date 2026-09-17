@@ -2,7 +2,6 @@
 
 import csv
 import io
-from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -10,18 +9,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, write_audit_log
+from app.core.time import utcnow
 from app.database import get_db
 from app.models.equipment import Equipment, EquipmentBooking
-from app.models.experiment import Experiment
-from app.models.project import Project, Task
+from app.models.project import Task
 from app.models.report import WeeklyReport
 from app.models.user import MemberProfile, User
 
 router = APIRouter(prefix="/exports", tags=["exports"])
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _require(user: User, roles: tuple) -> None:

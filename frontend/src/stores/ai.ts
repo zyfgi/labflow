@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import {
+  aiStatus,
   chat as chatApi,
   deleteConversation as deleteConversationApi,
   getConversation,
@@ -35,10 +36,10 @@ export const useAiStore = defineStore('ai', () => {
 
   async function loadStatus() {
     try {
-      const { data } = await import('@/api/ai').then((m) => m.aiStatus())
+      const { data } = await aiStatus()
       aiEnabled.value = data.data.ai_enabled
     } catch {
-      aiEnabled.value = true // backend < flag absent: keep UI usable
+      aiEnabled.value = false
     }
   }
 

@@ -12,7 +12,6 @@ from app.schemas.learning import (
     LearningPlanCreate,
     LearningPlanOut,
     LearningPlanUpdate,
-    validate_plan_status,
 )
 
 router = APIRouter(prefix="/learning-plans", tags=["learning-plans"])

@@ -1,13 +1,14 @@
 """PI and Student dashboards. Every number is a live database query."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user
 from app.core.responses import ok
+from app.core.time import app_today, utcnow, week_start_of
 from app.database import get_db
 from app.models.equipment import (
     Equipment,
@@ -16,9 +17,7 @@ from app.models.equipment import (
 )
 from app.models.enums import (
     BookingStatus,
-    BorrowStatus,
     EquipmentStatus,
-    ExperimentStatus,
     MaintenanceStatus,
     ReportStatus,
     TaskStatus,
@@ -34,15 +33,6 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 OPEN_TASK_STATUSES = (TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED, TaskStatus.REVIEW)
 
 
-def _week_start() -> date:
-    today = date.today()
-    return today - timedelta(days=today.weekday())
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
 @router.get("/pi")
 def pi_dashboard(
     user: User = Depends(get_current_user),
@@ -53,8 +43,8 @@ def pi_dashboard(
 
         raise HTTPException(status_code=403, detail="该看板仅对 PI/教师开放")
 
-    today = date.today()
-    week_start = _week_start()
+    today = app_today()
+    week_start = week_start_of()
 
     # ---- KPIs ----
     member_total = db.scalar(
@@ -132,108 +122,137 @@ def pi_dashboard(
         "bookings_today": bookings_today,
     }
 
-    # ---- member progress ----
+    # ---- member progress (set-based: 5 aggregate queries total) ----
     members = db.scalars(
         select(MemberProfile).options(joinedload(MemberProfile.user)).where(MemberProfile.status == "active")
     ).all()
+    member_user_ids = [m.user_id for m in members]
+
+    open_cond = Task.status.in_(OPEN_TASK_STATUSES)
+    task_rows = db.execute(
+        select(
+            Task.assignee_id,
+            func.count().label("open"),
+            func.sum(case((Task.due_date < today, 1), else_=0)).label("overdue"),
+        )
+        .where(
+            Task.deleted_at.is_(None),
+            open_cond,
+            Task.assignee_id.in_(member_user_ids or [0]),
+        )
+        .group_by(Task.assignee_id)
+    ).all()
+    task_by_user = {r[0]: (r[1] or 0, r[2] or 0) for r in task_rows}
+
+    report_rows = db.execute(
+        select(WeeklyReport.member_id, WeeklyReport.status).where(
+            WeeklyReport.member_id.in_([m.id for m in members] or [0]),
+            WeeklyReport.week_start == week_start,
+        )
+    ).all()
+    report_by_member = {r[0]: r[1] for r in report_rows}
+
+    exp_rows = db.execute(
+        select(Experiment.owner_id, func.max(Experiment.experiment_date))
+        .where(
+            Experiment.deleted_at.is_(None),
+            Experiment.owner_id.in_(member_user_ids or [0]),
+        )
+        .group_by(Experiment.owner_id)
+    ).all()
+    exp_by_user = {r[0]: r[1] for r in exp_rows}
+
+    pm_rows = db.execute(
+        select(ProjectMember.user_id, Project.id, Project.name).join(
+            Project, ProjectMember.project_id == Project.id
+        ).where(
+            ProjectMember.left_at.is_(None),
+            ProjectMember.user_id.in_(member_user_ids or [0]),
+            Project.deleted_at.is_(None),
+            Project.status.in_(("planning", "active", "paused")),
+        )
+    ).all()
+    projects_by_user: dict[int, list[tuple[int, str]]] = {}
+    for uid, pid, pname in pm_rows:
+        projects_by_user.setdefault(uid, []).append((pid, pname))
+
     member_rows = []
     for m in members:
-        proj_ids = db.scalars(
-            select(ProjectMember.project_id).where(
-                ProjectMember.user_id == m.user_id, ProjectMember.left_at.is_(None)
-            )
-        ).all()
-        projects = db.scalars(
-            select(Project).where(
-                Project.id.in_(proj_ids or [0]),
-                Project.deleted_at.is_(None),
-                Project.status.in_(("planning", "active", "paused")),
-            )
-        ).all() if proj_ids else []
-        in_progress = db.scalar(
-            select(func.count()).select_from(Task).where(
-                Task.assignee_id == m.user_id, Task.deleted_at.is_(None), Task.status.in_(OPEN_TASK_STATUSES)
-            )
-        ) or 0
-        overdue = db.scalar(
-            select(func.count()).select_from(Task).where(
-                Task.assignee_id == m.user_id,
-                Task.deleted_at.is_(None),
-                Task.status.in_(OPEN_TASK_STATUSES),
-                Task.due_date < today,
-            )
-        ) or 0
-        report = db.scalar(
-            select(WeeklyReport).where(
-                WeeklyReport.member_id == m.id, WeeklyReport.week_start == week_start
-            )
-        )
-        latest_exp = db.scalar(
-            select(func.max(Experiment.experiment_date)).where(
-                Experiment.owner_id == m.user_id, Experiment.deleted_at.is_(None)
-            )
-        )
+        open_n, overdue_n = task_by_user.get(m.user_id, (0, 0))
+        m_projects = projects_by_user.get(m.user_id, [])
+        latest_exp = exp_by_user.get(m.user_id)
         member_rows.append(
             {
                 "member_id": m.id,
                 "name": m.user.name if m.user else None,
                 "member_type": m.member_type,
                 "research_direction": m.research_direction,
-                "projects": [p.name for p in projects],
-                "in_progress_tasks": in_progress,
-                "overdue_tasks": overdue,
-                "this_week_report": report.status if report else "none",
+                "projects": [name for _, name in m_projects],
+                "in_progress_tasks": open_n,
+                "overdue_tasks": overdue_n,
+                "this_week_report": report_by_member.get(m.id, "none"),
                 "latest_experiment_date": latest_exp.isoformat() if latest_exp else None,
             }
         )
 
-    # ---- project progress ----
+    # ---- project progress (set-based: 4 queries total) ----
     projects = db.scalars(
         select(Project)
         .where(Project.deleted_at.is_(None), Project.status.in_(("planning", "active", "paused")))
         .order_by(Project.priority.desc(), Project.updated_at.desc())
         .limit(12)
     ).all()
+    project_ids = [p.id for p in projects]
+    owner_ids = {p.owner_id for p in projects if p.owner_id}
+    owner_names = dict(
+        db.execute(select(User.id, User.name).where(User.id.in_(owner_ids or [0]))).all()
+    )
+
+    ptask_rows = db.execute(
+        select(
+            Task.project_id,
+            func.count().label("total"),
+            func.sum(case((Task.status == TaskStatus.DONE, 1), else_=0)).label("done"),
+            func.sum(
+                case(
+                    (Task.status.in_(OPEN_TASK_STATUSES) & (Task.due_date < today), 1), else_=0
+                )
+            ).label("overdue"),
+        )
+        .where(Task.deleted_at.is_(None), Task.project_id.in_(project_ids or [0]))
+        .group_by(Task.project_id)
+    ).all()
+    stats_by_project = {r[0]: (r[1] or 0, r[2] or 0, r[3] or 0) for r in ptask_rows}
+
+    milestone_rows = db.scalars(
+        select(Milestone)
+        .where(
+            Milestone.project_id.in_(project_ids or [0]),
+            Milestone.status != "completed",
+            Milestone.due_date.is_not(None),
+        )
+        .order_by(Milestone.due_date)
+    ).all()
+    next_milestone_by_project: dict[int, Milestone] = {}
+    for ms in milestone_rows:
+        next_milestone_by_project.setdefault(ms.project_id, ms)
+
     project_rows = []
     for p in projects:
-        owner = db.get(User, p.owner_id) if p.owner_id else None
-        done = db.scalar(
-            select(func.count()).select_from(Task).where(
-                Task.project_id == p.id, Task.deleted_at.is_(None), Task.status == TaskStatus.DONE
-            )
-        ) or 0
-        total = db.scalar(
-            select(func.count()).select_from(Task).where(Task.project_id == p.id, Task.deleted_at.is_(None))
-        ) or 0
-        overdue = db.scalar(
-            select(func.count()).select_from(Task).where(
-                Task.project_id == p.id,
-                Task.deleted_at.is_(None),
-                Task.status.in_(OPEN_TASK_STATUSES),
-                Task.due_date < today,
-            )
-        ) or 0
-        next_milestone = db.scalar(
-            select(Milestone).where(
-                Milestone.project_id == p.id,
-                Milestone.status != "completed",
-                Milestone.due_date.is_not(None),
-            ).order_by(Milestone.due_date)
-        )
+        total_t, done_t, overdue_t = stats_by_project.get(p.id, (0, 0, 0))
+        ms = next_milestone_by_project.get(p.id)
         project_rows.append(
             {
                 "id": p.id,
                 "name": p.name,
-                "owner_name": owner.name if owner else None,
+                "owner_name": owner_names.get(p.owner_id) if p.owner_id else None,
                 "status": p.status,
                 "progress": p.progress,
-                "task_done": done,
-                "task_total": total,
-                "overdue_tasks": overdue,
+                "task_done": done_t,
+                "task_total": total_t,
+                "overdue_tasks": overdue_t,
                 "next_milestone": (
-                    {"title": next_milestone.title, "due_date": next_milestone.due_date.isoformat()}
-                    if next_milestone
-                    else None
+                    {"title": ms.title, "due_date": ms.due_date.isoformat()} if ms else None
                 ),
             }
         )
@@ -350,8 +369,8 @@ def student_dashboard(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    today = date.today()
-    week_start = _week_start()
+    today = app_today()
+    week_start = week_start_of()
     uid = user.id
 
     in_progress = db.scalar(
@@ -386,7 +405,7 @@ def student_dashboard(
         select(EquipmentBooking).where(
             EquipmentBooking.user_id == uid,
             EquipmentBooking.status == BookingStatus.APPROVED,
-            EquipmentBooking.end_time > _utcnow(),
+            EquipmentBooking.end_time > utcnow(),
         ).order_by(EquipmentBooking.start_time).limit(5)
     ).all()
     booking_rows = []

@@ -1,10 +1,9 @@
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.deps import client_ip, get_current_user, write_audit_log
+from app.core.time import utcnow
 from app.core.responses import ok
 from app.core.security import create_access_token, hash_password, verify_password
 from app.database import get_db
@@ -25,7 +24,7 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -
     if user.status != UserStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已停用，请联系管理员")
 
-    user.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    user.last_login_at = utcnow()
     write_audit_log(db, user, "login", "user", user.id, ip_address=client_ip(request))
     db.commit()
 

@@ -1,4 +1,3 @@
-from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select

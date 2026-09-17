@@ -1,12 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
-
-def utcnow() -> datetime:
-    """Naive UTC timestamp; portable across PostgreSQL and SQLite."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+from app.core.time import utcnow
 
 
 class TimestampMixin:

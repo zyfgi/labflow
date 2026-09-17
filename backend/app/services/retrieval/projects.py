@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.models.project import Project
 from app.models.user import User
-from app.services.retrieval.access import visible_project_ids_subquery
-from app.services.retrieval.common import time_range, truncate
+from app.permissions.projects import visible_project_ids_subquery
+from app.core.time import time_range
+from app.services.retrieval.common import truncate
 from app.services.retrieval.entity_resolver import ResolvedEntities
 from app.services.retrieval.types import RetrievalHit, RetrievalPlan
 

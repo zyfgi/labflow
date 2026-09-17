@@ -3,67 +3,28 @@ scoped local retrieval → bounded context → provider call → persistence +
 audit. Every turn re-runs retrieval with the *current* user permissions.
 """
 
-import json
 import logging
-import re
 import time
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.time import utcnow
 from app.core.deps import write_audit_log
 from app.models.ai import AIConversation, AIMessage, AIRequestLog
 from app.models.user import User
-from app.services.ai.context_builder import build_context, source_label
-from app.services.ai.errors import AIConfigError, AIError, AIDisabledError
-from app.services.ai.prompts import (
-    NO_RESULT_ANSWER,
-    PLANNER_SYSTEM_PROMPT,
-    SYSTEM_PROMPT,
-    planner_user_prompt,
-)
+from app.services.ai.context_builder import build_context
+from app.services.ai.errors import AIError, AIDisabledError
+from app.services.ai.prompts import NO_RESULT_ANSWER, SYSTEM_PROMPT
 from app.services.ai.provider import LLMProvider, build_provider
 from app.services.ai.rate_limit import limiter
 from app.services.ai.schemas import AISource
 from app.services.retrieval.engine import retrieve
 from app.services.retrieval.intent_parser import parse_query
-from app.services.retrieval.types import RetrievalPlan
 
 logger = logging.getLogger("labflow.ai")
 
 HISTORY_MESSAGE_LIMIT = 8
-
-
-def _extract_json(text: str) -> dict:
-    """Pull the first JSON object out of a model reply (tolerates fences)."""
-    text = text.strip()
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        raise ValueError("no JSON object in planner reply")
-    return json.loads(match.group(0))
-
-
-async def _llm_plan(provider: LLMProvider, question: str) -> RetrievalPlan | None:
-    """First LLM call: question only — no LabFlow data ever leaves here.
-
-    Any failure falls back to the rule-based parser (never fails the request).
-    """
-    try:
-        resp = await provider.chat(
-            [
-                {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
-                {"role": "user", "content": planner_user_prompt(question)},
-            ],
-            temperature=0.0,
-            max_tokens=300,
-        )
-        data = _extract_json(resp.content)
-        allowed = {k: data[k] for k in RetrievalPlan.model_fields if k in data}
-        return RetrievalPlan.model_validate(allowed)
-    except Exception as e:
-        logger.info("query planner fallback: %s", e.__class__.__name__)
-        return None
 
 
 def _get_or_create_conversation(
@@ -103,18 +64,15 @@ async def ai_chat(
 
     conversation = _get_or_create_conversation(db, user, conversation_id, message)
     db.add(AIMessage(conversation_id=conversation.id, role="user", content=message))
+    # bump so the conversation surfaces at the top of the history list
+    conversation.updated_at = utcnow()
     db.flush()
 
     retrieval_count = 0
     status = "success"
     error_code = None
     try:
-        plan: RetrievalPlan | None = None
-        if settings.AI_QUERY_PLANNER_ENABLED:
-            plan = await _llm_plan(provider, message)
-        if plan is None:
-            plan = parse_query(message)
-
+        plan = parse_query(message)
         _plan, hits = retrieve(
             db, user, message, plan=plan, limit=settings.AI_MAX_RETRIEVAL_HITS
         )
@@ -125,7 +83,7 @@ async def ai_chat(
             provider_model = getattr(provider, "model", None)
             input_tokens = output_tokens = None
         else:
-            context = build_context(message, hits)
+            context = build_context(hits)
             chat_messages = (
                 [{"role": "system", "content": SYSTEM_PROMPT}]
                 + _recent_history(conversation)
@@ -210,5 +168,4 @@ async def ai_chat(
         "sources": sources,
         "model": provider_model,
         "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
-        "source_labels": [source_label(h) for h in hits],
     }

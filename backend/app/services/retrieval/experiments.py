@@ -1,15 +1,14 @@
 """Experiment retrieval (permission scope: readable projects, always in SQL)."""
 
-from datetime import datetime
-
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.experiment import Experiment
 from app.models.project import Project
 from app.models.user import User
-from app.services.retrieval.access import apply_project_read_scope
-from app.services.retrieval.common import first_non_empty, time_range, truncate
+from app.permissions.projects import apply_project_read_scope
+from app.core.time import app_today, time_range
+from app.services.retrieval.common import first_non_empty, truncate
 from app.services.retrieval.entity_resolver import ResolvedEntities
 from app.services.retrieval.types import RetrievalHit, RetrievalPlan
 
@@ -85,7 +84,7 @@ def search_experiments(
                 if f and kw.lower() in f.lower():
                     score += 2
         if e.experiment_date:
-            days = (datetime.now().date() - e.experiment_date).days
+            days = (app_today() - e.experiment_date).days
             if days <= 7:
                 score += 2
             elif days <= 30:

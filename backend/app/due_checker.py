@@ -19,7 +19,6 @@ from app.models.equipment import Equipment, EquipmentBooking, EquipmentBorrow
 from app.models.enums import BookingStatus, BorrowStatus, EquipmentStatus, TaskStatus
 from app.models.project import Task
 from app.models.system import Notification
-from app.models.user import User
 
 logger = logging.getLogger("labflow.due_checker")
 

@@ -1,34 +1,22 @@
-from datetime import date, timedelta
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, require_pi, write_audit_log
+from app.core.time import app_today, week_start_of
 from app.core.responses import ok, paged
 from app.database import get_db
 from app.models.enums import Role
-from app.models.learning import LearningPlan
 from app.models.user import MemberProfile, User
-from app.permissions import can_view_member, ensure_can_view_member, is_staff
+from app.permissions import ensure_can_view_member, is_staff
 from app.schemas.member import (
     MemberCreate,
-    MemberDetailOut,
     MemberOut,
     MemberUpdate,
 )
 from app.schemas.user import UserOut
 
 router = APIRouter(prefix="/members", tags=["members"])
-
-
-def _today() -> date:
-    return date.today()
-
-
-def _current_week_start() -> date:
-    today = _today()
-    return today - timedelta(days=today.weekday())
 
 
 def _member_out(member: MemberProfile) -> dict:
@@ -161,7 +149,7 @@ def member_overview(
     from app.models.project import Project, ProjectMember, Task
     from app.models.report import WeeklyReport
 
-    week_start = _current_week_start()
+    week_start = week_start_of()
 
     project_ids = db.scalars(
         select(ProjectMember.project_id).where(ProjectMember.user_id == member.user_id)
@@ -185,7 +173,7 @@ def member_overview(
             Task.assignee_id == member.user_id,
             Task.deleted_at.is_(None),
             Task.status.in_(("todo", "in_progress", "blocked", "review")),
-            Task.due_date < _today(),
+            Task.due_date < app_today(),
         )
     ) or 0
 

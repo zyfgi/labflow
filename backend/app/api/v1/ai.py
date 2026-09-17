@@ -13,13 +13,7 @@ from app.database import get_db
 from app.models.ai import AIConversation, AIMessage
 from app.models.user import User
 from app.services.ai.errors import (
-    AIConfigError,
-    AIDisabledError,
     AIError,
-    AIProviderAuthError,
-    AIProviderError,
-    AIProviderRateLimitError,
-    AIProviderTimeoutError,
     provider_status,
 )
 from app.services.ai.schemas import (

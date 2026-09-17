@@ -108,10 +108,3 @@ def parse_query(question: str) -> RetrievalPlan:
         mine_only=mine_only,
         experiment_no=exp_match.group(0) if exp_match else None,
     )
-
-
-def source_types_for_intent(intent: str) -> list[str]:
-    for pattern, it, sources in _INTENT_RULES:
-        if it == intent:
-            return sources
-    return []

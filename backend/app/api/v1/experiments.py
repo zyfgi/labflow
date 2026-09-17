@@ -1,4 +1,3 @@
-from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
@@ -6,22 +5,23 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, write_audit_log
+from app.core.time import app_today, utcnow
 from app.core.responses import ok, paged
 from app.database import get_db
 from app.models.experiment import Experiment, ExperimentAttachment
 from app.models.project import Project
 from app.models.user import User
-from app.permissions.projects import can_manage_project, can_read_project
+from app.permissions.projects import (
+    can_create_experiment,
+    can_manage_project,
+    can_read_project,
+)
 from app.schemas.experiment import ExperimentCreate, ExperimentOut, ExperimentUpdate
-from app.services.retrieval.access import visible_project_ids_subquery
+from app.permissions.projects import visible_project_ids_subquery
 from app.storage import storage_service
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 attachments_router = APIRouter(prefix="/experiment-attachments", tags=["experiments"])
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _get_experiment(db: Session, experiment_id: int) -> Experiment:
@@ -62,7 +62,7 @@ def _out(exp: Experiment, db: Session | None = None, with_owner: bool = False) -
 
 
 def _generate_experiment_no(db: Session) -> str:
-    prefix = f"EXP-{date.today().strftime('%Y%m%d')}-"
+    prefix = f"EXP-{app_today().strftime('%Y%m%d')}-"
     count = (
         db.scalar(
             select(func.count()).select_from(Experiment).where(Experiment.experiment_no.like(f"{prefix}%"))
@@ -119,15 +119,22 @@ def list_experiments(
         stmt.order_by(Experiment.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)
     ).all()
 
-    from app.models.user import User
+    # batch maps: constant query count regardless of page size
+    owner_ids = {e.owner_id for e in rows if e.owner_id}
+    owner_names = dict(
+        db.execute(select(User.id, User.name).where(User.id.in_(owner_ids or [0]))).all()
+    )
+    project_names = dict(
+        db.execute(
+            select(Project.id, Project.name).where(Project.id.in_({e.project_id for e in rows} or [0]))
+        ).all()
+    )
 
     items = []
     for exp in rows:
         item = _out(exp)
-        owner = db.get(User, exp.owner_id) if exp.owner_id else None
-        item["owner_name"] = owner.name if owner else None
-        proj = db.get(Project, exp.project_id)
-        item["project_name"] = proj.name if proj else None
+        item["owner_name"] = owner_names.get(exp.owner_id)
+        item["project_name"] = project_names.get(exp.project_id)
         items.append(item)
     return paged(items, total, page, page_size)
 
@@ -141,7 +148,8 @@ def create_experiment(
     project = db.get(Project, body.project_id)
     if not project or project.deleted_at is not None:
         raise HTTPException(status_code=404, detail="项目不存在")
-    if not can_read_project(db, user, project):
+    # lab visibility alone is NOT enough: creating records requires membership
+    if not can_create_experiment(db, user, project):
         raise HTTPException(status_code=403, detail="只有项目成员可以创建实验记录")
 
     exp = Experiment(
@@ -149,7 +157,7 @@ def create_experiment(
         experiment_no=_generate_experiment_no(db),
         owner_id=user.id,
         status="draft",
-        experiment_date=body.experiment_date or date.today(),
+        experiment_date=body.experiment_date or app_today(),
     )
     db.add(exp)
     db.flush()
@@ -306,7 +314,8 @@ def delete_attachment(
     if not att:
         raise HTTPException(status_code=404, detail="附件不存在")
     exp = _get_experiment(db, att.experiment_id)
-    if not (_can_edit_experiment(db, user, exp) or att.uploaded_by == user.id):
+    # a locked experiment is frozen: the uploader cannot delete via uploaded_by
+    if not (_can_edit_experiment(db, user, exp) or (not exp.is_locked and att.uploaded_by == user.id)):
         raise HTTPException(status_code=403, detail="没有删除该附件的权限")
     storage_service.delete(att.storage_path)
     db.delete(att)

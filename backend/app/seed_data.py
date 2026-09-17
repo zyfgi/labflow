@@ -215,7 +215,6 @@ def seed_domain(db: Session, users: dict) -> None:
     logger.info("weekly_reports: +%d", report_count)
 
     # ---- projects / milestones / tasks ----
-    from app.models.project import Milestone, Project, ProjectMember, Task  # noqa: PLC0415
     from app.models.enums import MilestoneStatus  # noqa: PLC0415
 
     PROJECTS = [
@@ -328,8 +327,6 @@ def seed_domain(db: Session, users: dict) -> None:
     logger.info("projects/milestones/tasks seeded")
 
     # ---- experiments ----
-    from app.models.experiment import Experiment  # noqa: PLC0415
-    from app.models.enums import ExperimentStatus as _ExpStatus  # noqa: PLC0415
 
     EXPERIMENTS = [
         ("LAB-P001", "phd01", "垂向刚度递推辨识验证", ExperimentStatus.COMPLETED, -18,
@@ -410,7 +407,6 @@ def seed_domain(db: Session, users: dict) -> None:
     from app.models.enums import (  # noqa: PLC0415
         BookingStatus,
         BorrowStatus,
-        EquipmentStatus,
         MaintenanceStatus,
     )
 

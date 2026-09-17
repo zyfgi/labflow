@@ -7,7 +7,7 @@ from app.core.responses import ok
 from app.database import get_db
 from app.models.learning import MemberSkill, Skill
 from app.models.user import MemberProfile, User
-from app.permissions import ensure_can_view_member, require_member_profile
+from app.permissions import ensure_can_view_member
 from app.schemas.learning import MemberSkillItem, MemberSkillOut, SkillCreate, SkillOut
 
 router = APIRouter(prefix="/skills", tags=["skills"])

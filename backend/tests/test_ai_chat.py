@@ -11,12 +11,7 @@ from tests.conftest import auth_headers
 @pytest.fixture()
 def ai_env(monkeypatch):
     monkeypatch.setattr(settings, "AI_ENABLED", True)
-    fake = FakeLLMProvider(
-        responses=[
-            '{"intent":"general","source_types":["task"],"time_preset":"all","keywords":[],"mine_only":false}',
-            "根据检索到的任务记录，回答内容……",
-        ]
-    )
+    fake = FakeLLMProvider(response="根据检索到的任务记录，回答内容……")
     monkeypatch.setattr("app.services.ai.service.build_provider", lambda: fake)
     return fake
 
@@ -74,7 +69,7 @@ def test_chat_provider_timeout_mapped(client, db, pi, student, monkeypatch):
     monkeypatch.setattr("app.services.ai.service.build_provider", lambda: fake)
     resp = client.post(
         "/api/v1/ai/chat",
-        json={"message": "最近有什么任务"},
+        json={"message": "我有哪些未完成的任务？"},
         headers=auth_headers(student),
     )
     assert resp.status_code == 504
@@ -94,8 +89,8 @@ def test_chat_no_results_returns_canned_answer_without_llm(client, db, student, 
     data = resp.json()["data"]
     assert "没有找到足够信息" in data["answer"]
     assert data["sources"] == []
-    # only the planner call happened (fallback); no second (answer) call
-    assert len(ai_env.calls) <= 1
+    # no LLM call at all when retrieval found nothing
+    assert len(ai_env.calls) == 0
 
 
 def test_conversation_history_and_ownership(client, db, pi, student, student_b, ai_env):
@@ -169,23 +164,6 @@ def test_rate_limit_blocks_flood(client, db, student, monkeypatch):
     assert resp.status_code == 429
     assert resp.json()["detail"]["code"] == "AI_RATE_LIMITED"
     limiter._windows.pop(student.id, None)
-
-
-def test_planner_failure_falls_back_to_rules(client, db, pi, student, monkeypatch):
-    """Planner returns garbage -> request must still succeed via rule parser."""
-    monkeypatch.setattr(settings, "AI_ENABLED", True)
-    _setup_project_with_task(client, db, pi, student)
-    fake = FakeLLMProvider(responses=["这不是JSON", "规则解析后的回答"])
-    monkeypatch.setattr("app.services.ai.service.build_provider", lambda: fake)
-
-    resp = client.post(
-        "/api/v1/ai/chat",
-        json={"message": "我有哪些未完成的任务？"},
-        headers=auth_headers(student),
-    )
-    assert resp.status_code == 200
-    data = resp.json()["data"]
-    assert data["answer"] == "规则解析后的回答"
 
 
 def test_chat_input_validation(client, db, student, ai_env):

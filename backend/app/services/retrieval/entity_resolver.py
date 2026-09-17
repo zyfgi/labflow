@@ -1,7 +1,10 @@
 """Layer A: resolve concrete entities (member / project / equipment) from the
-question text. Resolution only returns identity rows; data access still goes
-through the permission-scoped retrievers, so resolving an entity the user
-cannot read simply yields zero hits downstream (no existence leak).
+question text. One query per entity type: load id/name pairs, pick the
+longest occurring match in Python, then load that single row if needed.
+
+Resolution only returns identity rows; data access still goes through the
+permission-scoped retrievers, so resolving an entity the user cannot read
+simply yields zero hits downstream (no existence leak).
 """
 
 import re
@@ -14,6 +17,8 @@ from app.models.equipment import Equipment
 from app.models.experiment import Experiment
 from app.models.project import Project
 from app.models.user import MemberProfile, User
+
+_EXPERIMENT_NO_RE = re.compile(r"EXP-\d{8}-\d{3,5}", re.IGNORECASE)
 
 
 @dataclass
@@ -28,7 +33,14 @@ class ResolvedEntities:
         return any((self.member, self.project, self.equipment, self.experiment_id))
 
 
-_EXPERIMENT_NO_RE = re.compile(r"EXP-\d{8}-\d{3,5}", re.IGNORECASE)
+def _best_match(names: list[str], text: str) -> str | None:
+    """Longest name that literally occurs in the question (specific beats short)."""
+    best: str | None = None
+    for name in names:
+        if name and len(name) >= 2 and name in text:
+            if best is None or len(name) > len(best):
+                best = name
+    return best
 
 
 def resolve_entities(
@@ -39,63 +51,47 @@ def resolve_entities(
     if not text:
         return result
 
-    # experiment number (exact, regex-shaped)
+    # experiment number (regex-shaped, exact)
     m = _EXPERIMENT_NO_RE.search(text.upper())
     if m:
-        exp = db.scalar(select(Experiment.id).where(Experiment.experiment_no == m.group(0)))
-        if exp:
-            result.experiment_id = exp
+        exp_id = db.scalar(select(Experiment.id).where(Experiment.experiment_no == m.group(0)))
+        if exp_id:
+            result.experiment_id = exp_id
 
-    # member: DB names occurring in the question (2+ chars)
-    for name in db.scalars(select(User.name)).all()[:1000]:
-        if name and len(name) >= 2 and name in text:
-            profile = db.scalar(
-                select(MemberProfile).where(
-                    MemberProfile.user_id == db.scalar(select(User.id).where(User.name == name))
-                )
-            )
-            if profile is not None:
-                result.member = profile
-                break
-    if result.member is None and plan_member_name:
+    # member: one query for names, one for the chosen profile
+    names = db.scalars(select(User.name)).all()
+    chosen = _best_match(list(names), text) or plan_member_name
+    if chosen:
         result.member = db.scalar(
             select(MemberProfile)
             .join(User, MemberProfile.user_id == User.id)
-            .where(User.name == plan_member_name)
+            .where(User.name == chosen)
         )
 
-    # project: DB names / codes occurring in the question
-    for name in db.scalars(select(Project.name).where(Project.deleted_at.is_(None))).all()[:500]:
-        if name and len(name) >= 2 and name in text:
-            result.project = db.scalar(
-                select(Project).where(Project.deleted_at.is_(None), Project.name == name)
-            )
-            if result.project:
-                break
-    if result.project is None:
-        for code in db.scalars(select(Project.code).where(Project.deleted_at.is_(None))).all()[:500]:
-            if code and len(code) >= 2 and code.upper() in text.upper():
-                result.project = db.scalar(
-                    select(Project).where(Project.deleted_at.is_(None), Project.code == code)
-                )
-                if result.project:
-                    break
+    # project: one query for (id, name, code), one for the chosen row
+    rows = db.execute(
+        select(Project.id, Project.name, Project.code).where(Project.deleted_at.is_(None))
+    ).all()
+    best_id, best_len = None, 0
+    for pid, name, code in rows:
+        for label in (name, code):
+            if label and len(label) >= 2 and label in text and len(label) > best_len:
+                best_id, best_len = pid, len(label)
+    if best_id is not None:
+        result.project = db.get(Project, best_id)
 
-    # equipment: DB names / asset numbers occurring in the question
-    for name in db.scalars(select(Equipment.name).where(Equipment.deleted_at.is_(None))).all()[:500]:
-        if name and len(name) >= 2 and name in text:
-            result.equipment = db.scalar(
-                select(Equipment).where(Equipment.deleted_at.is_(None), Equipment.name == name)
-            )
-            if result.equipment:
-                break
-    if result.equipment is None:
-        for no in db.scalars(select(Equipment.asset_no).where(Equipment.deleted_at.is_(None))).all()[:500]:
-            if no and len(no) >= 2 and no.upper() in text.upper():
-                result.equipment = db.scalar(
-                    select(Equipment).where(Equipment.deleted_at.is_(None), Equipment.asset_no == no)
-                )
-                if result.equipment:
-                    break
+    # equipment: same pattern
+    rows = db.execute(
+        select(Equipment.id, Equipment.name, Equipment.asset_no).where(
+            Equipment.deleted_at.is_(None)
+        )
+    ).all()
+    best_id, best_len = None, 0
+    for eid, name, asset_no in rows:
+        for label in (name, asset_no):
+            if label and len(label) >= 2 and label in text and len(label) > best_len:
+                best_id, best_len = eid, len(label)
+    if best_id is not None:
+        result.equipment = db.get(Equipment, best_id)
 
     return result

@@ -1,26 +1,6 @@
 """Shared helpers for retrieval source modules."""
 
-from datetime import date, timedelta
-
-
-def time_range(preset: str) -> tuple[date | None, date | None]:
-    """Resolve a time preset to (from, to) using the server-local calendar."""
-    today = date.today()
-    if preset == "today":
-        return today, today
-    if preset == "this_week":
-        ws = today - timedelta(days=today.weekday())
-        return ws, today
-    if preset == "last_week":
-        ws = today - timedelta(days=today.weekday())
-        return ws - timedelta(days=7), ws - timedelta(days=1)
-    if preset == "last_7_days":
-        return today - timedelta(days=6), today
-    if preset == "last_30_days":
-        return today - timedelta(days=29), today
-    if preset == "this_month":
-        return today.replace(day=1), today
-    return None, None
+from app.core.time import time_range  # noqa: F401  (re-exported for modules)
 
 
 def truncate(text: str | None, limit: int = 220) -> str:

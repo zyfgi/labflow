@@ -6,7 +6,7 @@ engine uses, so search and AI can never diverge on permissions.
 """
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user
@@ -16,11 +16,8 @@ from app.models.equipment import Equipment
 from app.models.experiment import Experiment
 from app.models.project import Project, Task
 from app.models.user import MemberProfile, User
-from app.services.retrieval.access import (
-    apply_project_read_scope,
-    is_teaching_staff,
-    visible_project_ids_subquery,
-)
+from app.permissions import is_teaching_staff
+from app.permissions.projects import apply_project_read_scope, visible_project_ids_subquery
 
 router = APIRouter(prefix="/search", tags=["search"])
 

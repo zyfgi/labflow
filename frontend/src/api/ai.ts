@@ -37,18 +37,6 @@ export interface AIConversationDetail {
   messages: AIMessageRow[]
 }
 
-export interface AIRetrievalHit {
-  source_type: string
-  source_id: number
-  title: string
-  excerpt: string
-  score: number
-  url: string | null
-  project_id: number | null
-  occurred_at: string | null
-  metadata: Record<string, unknown>
-}
-
 export function chat(message: string, conversationId?: number) {
   return client.post<{ data: AIChatResult }>('/ai/chat', {
     message,
@@ -63,25 +51,12 @@ export function listConversations(page = 1) {
   )
 }
 
-export function createConversation(title?: string) {
-  return client.post<{ data: { id: number; title: string } }>('/ai/conversations', {
-    title: title ?? null,
-  })
-}
-
 export function getConversation(id: number) {
   return client.get<{ data: AIConversationDetail }>(`/ai/conversations/${id}`)
 }
 
 export function deleteConversation(id: number) {
   return client.delete(`/ai/conversations/${id}`)
-}
-
-export function retrieveDebug(query: string, limit = 16) {
-  return client.post<{ data: { plan: Record<string, unknown>; hits: AIRetrievalHit[] } }>(
-    '/ai/retrieve',
-    { query, limit },
-  )
 }
 
 export function aiStatus() {

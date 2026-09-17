@@ -1,20 +1,22 @@
-from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, write_audit_log
+from app.core.time import app_today
 from app.core.responses import ok, paged
 from app.database import get_db
 from app.models.base import utcnow
 from app.models.project import Project, Task, TaskComment
 from app.models.user import User
-from app.permissions.projects import ensure_project_manageable, ensure_project_visible
-from app.services.retrieval.access import visible_project_ids_subquery
+from app.permissions.projects import (
+    ensure_project_manageable,
+    ensure_project_visible,
+    visible_task_scope_conditions,
+)
 from app.schemas.project import (
     TaskCommentCreate,
-    TaskCommentOut,
     TaskCreate,
     TaskOut,
     TaskStatusRequest,
@@ -75,10 +77,7 @@ def list_tasks(
         stmt = stmt.where(Task.project_id == project_id)
     else:
         # shared permission scope: own tasks OR tasks in readable projects
-        stmt = stmt.where(
-            (Task.assignee_id == user.id)
-            | Task.project_id.in_(visible_project_ids_subquery(user))
-        )
+        stmt = stmt.where(visible_task_scope_conditions(user))
 
     if status:
         stmt = stmt.where(Task.status == status)
@@ -87,7 +86,7 @@ def list_tasks(
         stmt = stmt.where(Task.title.ilike(kw))
     if overdue:
         stmt = stmt.where(
-            Task.status.notin_(DONE_STATUSES), Task.due_date.is_not(None), Task.due_date < date.today()
+            Task.status.notin_(DONE_STATUSES), Task.due_date.is_not(None), Task.due_date < app_today()
         )
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
@@ -95,20 +94,25 @@ def list_tasks(
         stmt.order_by(Task.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)
     ).all()
 
+    # batch maps: constant query count regardless of page size
+    project_names = dict(
+        db.execute(
+            select(Project.id, Project.name).where(Project.id.in_({t.project_id for t in rows} or [0]))
+        ).all()
+    )
+    assignee_ids = {t.assignee_id for t in rows if t.assignee_id}
+    assignee_names = dict(
+        db.execute(select(User.id, User.name).where(User.id.in_(assignee_ids or [0]))).all()
+    )
+    today = app_today()
+
     items = []
     for t in rows:
         item = _out(t)
-        proj = db.get(Project, t.project_id)
-        item["project_name"] = proj.name if proj else None
-        if t.assignee_id:
-            assignee = db.get(User, t.assignee_id)
-            item["assignee_name"] = assignee.name if assignee else None
-        else:
-            item["assignee_name"] = None
+        item["project_name"] = project_names.get(t.project_id)
+        item["assignee_name"] = assignee_names.get(t.assignee_id)
         item["is_overdue"] = bool(
-            t.due_date
-            and t.due_date < date.today()
-            and t.status not in DONE_STATUSES
+            t.due_date and t.due_date < today and t.status not in DONE_STATUSES
         )
         items.append(item)
     return paged(items, total, page, page_size)
@@ -165,7 +169,7 @@ def get_task(
         item["assignee_name"] = None
     item["can_edit"] = _can_edit_task(db, user, task)
     item["is_overdue"] = bool(
-        task.due_date and task.due_date < date.today() and task.status not in DONE_STATUSES
+        task.due_date and task.due_date < app_today() and task.status not in DONE_STATUSES
     )
     return ok(item)
 

@@ -41,3 +41,7 @@ def ensure_can_view_member(user: User, member: MemberProfile) -> None:
 
 def is_staff(user: User) -> bool:
     return user.role in STAFF_ROLES
+
+
+def is_teaching_staff(user: User) -> bool:
+    return user.role in TEACHING_STAFF_ROLES

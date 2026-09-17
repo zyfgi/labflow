@@ -5,13 +5,14 @@ status pending/approved must never overlap in time:
     new_start < existing_end AND new_end > existing_start
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, write_audit_log
+from app.core.time import utcnow
 from app.core.responses import ok, paged
 from app.database import get_db
 from app.models.equipment import (
@@ -50,10 +51,6 @@ borrows_router = APIRouter(prefix="/equipment-borrows", tags=["equipment"])
 maintenance_router = APIRouter(prefix="/equipment-maintenance", tags=["equipment"])
 
 MANAGE_ROLES = (Role.PI, Role.EQUIPMENT_ADMIN)
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _get_equipment(db: Session, equipment_id: int) -> Equipment:

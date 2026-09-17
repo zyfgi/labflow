@@ -1,13 +1,14 @@
 """Equipment / maintenance / booking retrieval (visible to lab members)."""
 
-from datetime import date
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.time import app_today
 from app.models.equipment import Equipment, EquipmentBooking, EquipmentMaintenance
 from app.models.user import User
-from app.services.retrieval.common import time_range, truncate
+from app.core.time import time_range
+from app.services.retrieval.common import truncate
 from app.services.retrieval.entity_resolver import ResolvedEntities
 from app.services.retrieval.types import RetrievalHit, RetrievalPlan
 
@@ -30,8 +31,12 @@ def search_equipment(
         stmt = stmt.where(or_(*(or_(*(f.ilike(f"%{kw}%") for f in fields)) for kw in keywords)))
 
     rows = db.scalars(stmt.limit(limit * 2)).all()
+    manager_ids = {e.manager_id for e in rows if e.manager_id}
+    manager_names = dict(
+        db.execute(select(User.id, User.name).where(User.id.in_(manager_ids or [0]))).all()
+    )
     hits: list[RetrievalHit] = []
-    today = date.today()
+    today = app_today()
     for e in rows:
         score = 1.0
         for kw in keywords:
@@ -41,7 +46,7 @@ def search_equipment(
                 score += 2
         if entities.equipment and e.id == entities.equipment.id:
             score += 5
-        manager = db.get(User, e.manager_id) if e.manager_id else None
+        manager_name = manager_names.get(e.manager_id)
         hits.append(
             RetrievalHit(
                 source_type="equipment",
@@ -58,7 +63,7 @@ def search_equipment(
                     "status": e.status,
                     "category": e.category,
                     "location": e.location,
-                    "manager_name": manager.name if manager else None,
+                    "manager_name": manager_name,
                     "model": e.model,
                     "as_of": today.isoformat(),
                     "context": {
@@ -68,7 +73,7 @@ def search_equipment(
                         "model": e.model,
                         "location": e.location,
                         "status": e.status,
-                        "manager_name": manager.name if manager else None,
+                        "manager_name": manager_name,
                     },
                 },
             )
@@ -107,9 +112,16 @@ def search_maintenance(
     rows = db.scalars(
         stmt.order_by(EquipmentMaintenance.reported_at.desc()).limit(limit * 2)
     ).all()
+    equipment_map = dict(
+        db.execute(
+            select(Equipment.id, Equipment.name).where(
+                Equipment.id.in_({m.equipment_id for m in rows} or [0])
+            )
+        ).all()
+    )
     hits: list[RetrievalHit] = []
     for m in rows:
-        eq = db.get(Equipment, m.equipment_id)
+        eq_name = equipment_map.get(m.equipment_id)
         score = 2.0
         for kw in keywords:
             if m.description and kw.lower() in m.description.lower():
@@ -122,7 +134,7 @@ def search_maintenance(
             RetrievalHit(
                 source_type="maintenance",
                 source_id=m.id,
-                title=f"维修记录：{eq.name if eq else m.equipment_id}（{m.type}）",
+                title=f"维修记录：{eq_name or m.equipment_id}（{m.type}）",
                 excerpt=truncate(
                     f"状态 {m.status} · {m.description or ''} {m.result or ''}"
                 ),
@@ -131,12 +143,12 @@ def search_maintenance(
                 project_id=None,
                 occurred_at=m.reported_at,
                 metadata={
-                    "equipment_name": eq.name if eq else None,
+                    "equipment_name": eq_name,
                     "maintenance_status": m.status,
                     "vendor": m.vendor,
                     "result": truncate(m.result, 120) or None,
                     "context": {
-                        "equipment_name": eq.name if eq else None,
+                        "equipment_name": eq_name,
                         "type": m.type,
                         "description": truncate(m.description, 400),
                         "status": m.status,
@@ -160,7 +172,7 @@ def search_bookings(
     use_keywords: bool = True,
 ) -> list[RetrievalHit]:
     """Booking visibility: staff/equipment-admin see all; others see only own."""
-    from app.services.retrieval.access import TEACHING_STAFF_ROLES
+    from app.permissions import TEACHING_STAFF_ROLES
 
     stmt = (
         select(EquipmentBooking)
@@ -182,9 +194,16 @@ def search_bookings(
         stmt = stmt.where(EquipmentBooking.start_time <= f"{date_to} 23:59:59")
 
     rows = db.scalars(stmt.order_by(EquipmentBooking.start_time.desc()).limit(limit * 2)).all()
+    equipment_map = dict(
+        db.execute(
+            select(Equipment.id, Equipment.name).where(
+                Equipment.id.in_({b.equipment_id for b in rows} or [0])
+            )
+        ).all()
+    )
     hits: list[RetrievalHit] = []
     for b in rows:
-        eq = db.get(Equipment, b.equipment_id)
+        eq_name = equipment_map.get(b.equipment_id)
         score = 2.0
         if entities.equipment and b.equipment_id == entities.equipment.id:
             score += 4
@@ -192,7 +211,7 @@ def search_bookings(
             RetrievalHit(
                 source_type="booking",
                 source_id=b.id,
-                title=f"预约：{eq.name if eq else b.equipment_id}",
+                title=f"预约：{eq_name or b.equipment_id}",
                 excerpt=truncate(
                     f"{b.start_time.strftime('%m-%d %H:%M')} ~ {b.end_time.strftime('%m-%d %H:%M')} · "
                     f"{b.user.name if b.user else ''} · {b.purpose or ''} · {b.status}"
@@ -203,7 +222,7 @@ def search_bookings(
                 occurred_at=b.start_time,
                 metadata={
                     "booking_status": b.status,
-                    "equipment_name": eq.name if eq else None,
+                    "equipment_name": eq_name,
                     "user_name": b.user.name if b.user else None,
                 },
             )

@@ -1,8 +1,15 @@
 """Retrieval engine entry point.
 
 retrieve() is independent of any LLM: question in, permission-filtered
-RetrievalHits out. The AI service and the /search + /ai/retrieve APIs all
-sit on top of this.
+RetrievalHits out. The AI service and the /search API both sit on top of this.
+
+Recall policy (intentionally simple):
+- exact entity or keyword matches win;
+- person-scoped questions ("我的…") skip keyword filtering entirely — they are
+  structured queries over the person's own records;
+- only overview/member_progress questions may fall back to a limited recency
+  recall inside the permission scope. Anything else with no matches returns
+  empty — we never pad the context with unrelated records.
 """
 
 import re
@@ -19,6 +26,9 @@ from app.services.retrieval import weekly_reports as report_retriever
 from app.services.retrieval.entity_resolver import resolve_entities
 from app.services.retrieval.intent_parser import parse_query
 from app.services.retrieval.types import ALL_SOURCE_TYPES, RetrievalHit, RetrievalPlan
+
+# exact-token lookups (ids, codes, hashes) never trigger recency fallback
+_EXACT_TOKEN_RE = re.compile(r"^[A-Za-z0-9_\-]{8,}$")
 
 
 def retrieve(
@@ -49,24 +59,23 @@ def retrieve(
         wanted.append("project")
     if entities.member and "member" not in wanted:
         wanted.append("member")
-    # maintenance/bookings intents imply equipment context
     if effective_plan.intent == "maintenance" and "equipment" not in wanted:
         wanted.append("equipment")
     if effective_plan.intent == "bookings" and "booking" not in wanted:
         wanted.append("booking")
 
+    # person-scoped questions are structured queries, not keyword searches
+    person_scoped = effective_plan.mine_only or entities.member is not None
+    use_keywords = not person_scoped
+
     per_source = max(3, min(8, limit))
-    # Recency-fallback (keyword pass found nothing) is only safe for open
-    # natural-language questions. It must NOT run for exact-token lookups or
-    # entity-targeted questions: asking about a hidden entity must yield zero
-    # hits, never "some other recent rows" (plan §43/§44).
-    fallback_allowed = not entities.found and not re.match(
-        r"^[A-Za-z0-9_\-]{8,}$", (query or "").strip()
+    may_fallback = (
+        effective_plan.intent in ("overview", "member_progress")
+        and not entities.found
+        and not _EXACT_TOKEN_RE.match((query or "").strip())
     )
+
     hits: list[RetrievalHit] = []
-    # date-sensitive sources keep their time filter even in relaxed recall,
-    # otherwise stale records would be presented as "recent" activity
-    UNDATED_SOURCES = {"task", "booking", "equipment", "maintenance", "member", "learning_plan"}
     searchers = {
         "project": project_retriever.search_projects,
         "task": task_retriever.search_tasks,
@@ -82,18 +91,11 @@ def retrieve(
         fn = searchers.get(source)
         if fn is None:
             continue
-        try:
-            found = fn(db, user, effective_plan, entities, limit=per_source)
-            if not found and effective_plan.keywords and fallback_allowed:
-                # keyword filters too narrow -> relaxed recall inside permission scope
-                updates: dict = {"keywords": []}
-                if source in UNDATED_SOURCES:
-                    updates["time_preset"] = "all"
-                relaxed = effective_plan.model_copy(update=updates)
-                found = fn(db, user, relaxed, entities, limit=per_source, use_keywords=False)
-            hits.extend(found)
-        except Exception:  # a failing source must not sink the whole retrieval
-            continue
+        found = fn(db, user, effective_plan, entities, limit=per_source, use_keywords=use_keywords)
+        if not found and may_fallback and effective_plan.keywords:
+            relaxed = effective_plan.model_copy(update={"keywords": []})
+            found = fn(db, user, relaxed, entities, limit=per_source, use_keywords=False)
+        hits.extend(found)
 
     hits.sort(key=lambda h: h.score, reverse=True)
     return effective_plan, hits[:limit]

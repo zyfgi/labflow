@@ -131,7 +131,6 @@ EXPERIMENT_STATUSES = [
     ExperimentStatus.ARCHIVED,
 ]
 
-ALLOWED_UPLOAD_EXTENSIONS = ["pdf", "docx", "xlsx", "csv", "png", "jpg", "jpeg", "zip", "txt", "md"]
 
 
 class EquipmentStatus:

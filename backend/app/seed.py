@@ -14,7 +14,7 @@ first login. Do not reuse these in production.
 
 import logging
 import sys
-from datetime import date, timedelta
+from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session

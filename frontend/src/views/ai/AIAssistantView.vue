@@ -27,6 +27,14 @@
 
       <!-- right: chat -->
       <div class="ai-main">
+        <el-alert
+          v-if="!store.aiEnabled"
+          type="info"
+          show-icon
+          :closable="false"
+          title="AI assistant is not enabled"
+          description="Set AI_ENABLED / AI_BASE_URL / AI_API_KEY / AI_MODEL in backend .env and restart."
+        />
         <div ref="messageBox" class="messages">
           <template v-if="store.hasMessages">
             <div v-for="(m, i) in store.messages" :key="i" class="msg" :class="m.role">
@@ -76,11 +84,13 @@
           <el-input
             v-model="draft"
             placeholder="输入问题，例如：我有哪些未完成的任务？"
-            :disabled="store.sending"
+            :disabled="store.sending || !store.aiEnabled"
             maxlength="4000"
             @keyup.enter="ask()"
           />
-          <el-button type="primary" :loading="store.sending" @click="ask()">发送</el-button>
+          <el-button type="primary" :loading="store.sending" :disabled="!store.aiEnabled" @click="ask()">
+            发送
+          </el-button>
         </div>
       </div>
     </div>

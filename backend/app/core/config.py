@@ -1,8 +1,7 @@
-import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, model_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # upload whitelist lives here (not in app.models) to avoid an import cycle
@@ -44,7 +43,6 @@ class Settings(BaseSettings):
     AI_TIMEOUT_SECONDS: int = 60
     AI_MAX_CONTEXT_CHARS: int = 30000
     AI_MAX_RETRIEVAL_HITS: int = 16
-    AI_QUERY_PLANNER_ENABLED: bool = True
     AI_AUDIT_STORE_QUERY: bool = False
     AI_DEBUG_RETRIEVAL: bool | None = None  # None -> enabled in development only
     AI_RATE_LIMIT_PER_MINUTE: int = 10

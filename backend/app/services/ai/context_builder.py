@@ -1,72 +1,48 @@
-"""Context builder: render permission-filtered hits into a bounded, minimal
-text context. Only whitelisted fields (added by the retrievers) are rendered;
-raw rows are never serialized. Every record is wrapped in an explicit
-untrusted-source boundary.
+"""Context builder: render permission-filtered hits into one bounded JSON block.
+
+Only whitelisted fields (added by the retrievers) are rendered; raw rows are
+never serialized. Records travel as JSON objects so titles/content containing
+quotes or angle brackets cannot break any tag boundary — the outer
+<labflow_sources> wrapper plus the system prompt's untrusted-data rule are the
+only contract with the model.
 """
 
+import json
+from datetime import date
+
 from app.core.config import settings
-from app.services.ai.prompts import SYSTEM_PROMPT  # noqa: F401  (re-export)
 from app.services.retrieval.types import RetrievalHit
 
-_SOURCE_LABELS = {
-    "project": "项目",
-    "task": "任务",
-    "experiment": "实验",
-    "weekly_report": "周报",
-    "equipment": "设备",
-    "maintenance": "维修记录",
-    "booking": "设备预约",
-    "member": "成员",
-    "learning_plan": "学习计划",
-}
 
-_EXCERPT_LIMIT = 500
+def _render_hit(hit: RetrievalHit) -> dict:
+    data = {k: v for k, v in (hit.metadata.get("context") or {}).items() if v not in (None, "")}
+    return {
+        "type": hit.source_type,
+        "id": hit.source_id,
+        "title": hit.title,
+        "data": data or {"excerpt": hit.excerpt},
+    }
 
 
-def source_label(hit: RetrievalHit) -> str:
-    label = _SOURCE_LABELS.get(hit.source_type, hit.source_type)
-    return f"[{label} {hit.title}]"
-
-
-def _render_hit(hit: RetrievalHit) -> str:
-    ctx = hit.metadata.get("context") or {}
-    lines: list[str] = []
-    for key, value in ctx.items():
-        if value is None or str(value).strip() == "":
-            continue
-        lines.append(f"{key}: {value}")
-    body = "\n".join(lines) if lines else hit.excerpt
-    if len(body) > _EXCERPT_LIMIT:
-        body = body[: _EXCERPT_LIMIT - 1] + "…"
-    return (
-        f'<labflow_source id="{hit.source_type}:{hit.source_id}" '
-        f'title="{hit.title}" url="{hit.url or ""}">\n{body}\n</labflow_source>'
-    )
-
-
-def build_context(question: str, hits: list[RetrievalHit]) -> str:
-    """Build the bounded source block appended to the user message.
+def build_context(hits: list[RetrievalHit]) -> str:
+    """Build the bounded JSON source block appended to the user message.
 
     Hits must already be permission-filtered by the retrieval engine; this
     function performs NO additional data access.
     """
-    from datetime import date
-
     header = (
         f"<labflow_metadata>\ncurrent_date: {date.today().isoformat()}\n"
         f"timezone: {settings.APP_TIMEZONE}\n</labflow_metadata>"
     )
-    chunks: list[str] = [header]
-    total = sum(len(c) for c in chunks)
+    records: list[dict] = []
+    total = len(header)
     max_chars = settings.AI_MAX_CONTEXT_CHARS
-    used: list[RetrievalHit] = []
     for hit in sorted(hits, key=lambda h: h.score, reverse=True):
-        block = _render_hit(hit)
-        if total + len(block) > max_chars:
+        record = _render_hit(hit)
+        size = len(json.dumps(record, ensure_ascii=False))
+        if total + size > max_chars:
             break
-        chunks.append(block)
-        total += len(block)
-        used.append(hit)
-    if not used:
-        return header + "\n<labflow_sources>\n(no matching records found)\n</labflow_sources>"
-    return header + "\n<labflow_sources>\n" + "\n".join(chunks) + "\n</labflow_sources>"
+        records.append(record)
+        total += size
+    body = json.dumps(records, ensure_ascii=False) if records else "[]"
+    return f"{header}\n<labflow_sources>\n{body}\n</labflow_sources>"

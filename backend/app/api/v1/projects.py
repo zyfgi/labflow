@@ -6,13 +6,13 @@ from app.core.deps import get_current_user, write_audit_log
 from app.core.responses import ok, paged
 from app.database import get_db
 from app.models.project import Milestone, Project, ProjectMember, Task
-from app.models.user import MemberProfile, User
+from app.models.user import User
 from app.permissions.projects import (
     ensure_project_manageable,
     ensure_project_visible,
     is_project_member,
 )
-from app.services.retrieval.access import visible_project_ids_subquery
+from app.permissions.projects import visible_project_ids_subquery
 from app.schemas.project import (
     MilestoneCreate,
     MilestoneOut,
@@ -73,10 +73,29 @@ def list_projects(
     rows = db.scalars(
         stmt.order_by(Project.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)
     ).all()
+
+    # batch maps: constant query count regardless of page size
+    owner_ids = {p.owner_id for p in rows if p.owner_id}
+    owner_names = dict(
+        db.execute(select(User.id, User.name).where(User.id.in_(owner_ids or [0]))).all()
+    )
+    my_memberships = dict(
+        db.execute(
+            select(ProjectMember.project_id, ProjectMember.project_role).where(
+                ProjectMember.user_id == user.id, ProjectMember.left_at.is_(None)
+            )
+        ).all()
+    )
+
     items = []
     for p in rows:
-        item = _out(p, _owner_name(db, p))
-        item["my_role"] = _my_role(db, p, user)
+        item = _out(p, owner_names.get(p.owner_id))
+        if p.owner_id == user.id:
+            item["my_role"] = "owner"
+        elif p.id in my_memberships:
+            item["my_role"] = my_memberships[p.id]
+        else:
+            item["my_role"] = "lab" if p.visibility == "lab" else "none"
         items.append(item)
     return paged(items, total, page, page_size)
 

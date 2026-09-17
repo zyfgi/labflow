@@ -8,7 +8,7 @@ from app.database import Base
 from app.models.base import TimestampMixin
 
 if TYPE_CHECKING:
-    from app.models.system import AuditLog
+    pass
 
 
 class User(Base, TimestampMixin):

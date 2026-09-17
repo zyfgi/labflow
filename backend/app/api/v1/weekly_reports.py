@@ -1,10 +1,11 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, write_audit_log
+from app.core.time import utcnow
 from app.core.responses import ok, paged
 from app.database import get_db
 from app.models.enums import REPORT_STATUSES, ReportStatus, Role
@@ -20,10 +21,6 @@ from app.schemas.report import (
 from app.services.notifications import create_notification
 
 router = APIRouter(prefix="/weekly-reports", tags=["weekly-reports"])
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _out(report: WeeklyReport) -> dict:
@@ -142,8 +139,9 @@ def my_current_week_report(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> dict:
     member_id = _require_own_member(user)
-    today = date.today()
-    week_start = today - timedelta(days=today.weekday())
+    from app.core.time import week_start_of
+
+    week_start = week_start_of()
     report = db.scalar(
         select(WeeklyReport).where(
             WeeklyReport.member_id == member_id, WeeklyReport.week_start == week_start
