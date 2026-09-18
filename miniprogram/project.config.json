@@ -1,0 +1,24 @@
+{
+  "description": "LabFlow miniprogram",
+  "packOptions": {
+    "ignore": [{ "type": "file", "value": "README.md" }],
+    "include": []
+  },
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.0.0",
+  "appid": "touristappid",
+  "projectname": "labflow-miniprogram",
+  "condition": {}
+}

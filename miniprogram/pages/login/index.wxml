@@ -1,0 +1,9 @@
+<view class="login">
+  <view class="logo">LF</view>
+  <view class="title">LabFlow 实验室协同</view>
+  <view class="muted" style="margin-top: 12rpx; text-align: center">
+    使用微信登录（需已绑定 LabFlow 账号）
+  </view>
+  <button class="btn block" loading="{{loading}}" bindtap="onLogin">微信登录</button>
+  <view wx:if="{{error}}" class="error">{{error}}</view>
+</view>

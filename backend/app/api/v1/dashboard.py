@@ -12,6 +12,7 @@ from app.core.time import app_today, utcnow, week_start_of
 from app.database import get_db
 from app.models.enums import (
     BookingStatus,
+    BorrowStatus,
     EquipmentStatus,
     MaintenanceStatus,
     ReportStatus,
@@ -20,6 +21,7 @@ from app.models.enums import (
 from app.models.equipment import (
     Equipment,
     EquipmentBooking,
+    EquipmentBorrow,
     EquipmentMaintenance,
 )
 from app.models.experiment import Experiment
@@ -34,7 +36,6 @@ OPEN_TASK_STATUSES = (
     TaskStatus.TODO,
     TaskStatus.IN_PROGRESS,
     TaskStatus.BLOCKED,
-    TaskStatus.REVIEW,
 )
 
 
@@ -87,9 +88,7 @@ def pi_dashboard(
                 .where(
                     WeeklyReport.member_id.in_(student_member_ids),
                     WeeklyReport.week_start == week_start,
-                    WeeklyReport.status.in_(
-                        (ReportStatus.SUBMITTED, ReportStatus.REVIEWED)
-                    ),
+                    WeeklyReport.status == ReportStatus.PUBLISHED,
                 )
             )
             or 0
@@ -151,7 +150,7 @@ def pi_dashboard(
             select(func.count())
             .select_from(EquipmentBooking)
             .where(
-                EquipmentBooking.status == BookingStatus.APPROVED,
+                EquipmentBooking.status == BookingStatus.RESERVED,
                 EquipmentBooking.start_time < tomorrow_start,
                 EquipmentBooking.end_time > today_start,
             )
@@ -319,28 +318,40 @@ def pi_dashboard(
             }
         )
 
-    # ---- pending items ----
-    pending_reports = (
-        db.scalar(
-            select(func.count())
-            .select_from(WeeklyReport)
-            .where(WeeklyReport.status == ReportStatus.SUBMITTED)
-        )
-        or 0
-    )
-    pending_bookings = (
-        db.scalar(
-            select(func.count())
-            .select_from(EquipmentBooking)
-            .where(EquipmentBooking.status == BookingStatus.PENDING)
-        )
-        or 0
-    )
+    # ---- attention items (提示，不阻断业务) ----
     fault_equipment = db.scalars(
         select(Equipment).where(
             Equipment.deleted_at.is_(None),
             Equipment.status.in_((EquipmentStatus.FAULT, EquipmentStatus.MAINTENANCE)),
         )
+    ).all()
+    overdue_borrow_rows = db.scalars(
+        select(EquipmentBorrow)
+        .where(
+            EquipmentBorrow.status.in_((BorrowStatus.BORROWED, BorrowStatus.OVERDUE)),
+            EquipmentBorrow.expected_return_time
+            < datetime.combine(today, datetime.min.time()),
+        )
+        .order_by(EquipmentBorrow.expected_return_time)
+        .limit(8)
+    ).all()
+    borrow_eq_names = dict(
+        db.execute(
+            select(Equipment.id, Equipment.name).where(
+                Equipment.id.in_({b.equipment_id for b in overdue_borrow_rows} or [0])
+            )
+        ).all()
+    )
+    stale_cutoff = datetime.combine(today - timedelta(days=30), datetime.min.time())
+    stale_projects = db.scalars(
+        select(Project)
+        .where(
+            Project.deleted_at.is_(None),
+            Project.status.in_(("planning", "active", "paused")),
+            Project.updated_at < stale_cutoff,
+        )
+        .order_by(Project.updated_at)
+        .limit(8)
     ).all()
     due_milestones = db.scalars(
         select(Milestone)
@@ -364,9 +375,7 @@ def pi_dashboard(
         .limit(8)
     ).all()
 
-    todo = {
-        "pending_reports": pending_reports,
-        "pending_bookings": pending_bookings,
+    attention = {
         "overdue_tasks": [
             {
                 "id": t.id,
@@ -375,9 +384,27 @@ def pi_dashboard(
             }
             for t in overdue_task_rows
         ],
+        "overdue_borrows": [
+            {
+                "id": b.id,
+                "equipment_name": borrow_eq_names.get(b.equipment_id),
+                "expected_return_time": b.expected_return_time.isoformat()
+                if b.expected_return_time
+                else None,
+            }
+            for b in overdue_borrow_rows
+        ],
         "fault_equipment": [
             {"id": e.id, "name": e.name, "status": e.status, "asset_no": e.asset_no}
             for e in fault_equipment
+        ],
+        "stale_projects": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "updated_at": p.updated_at.isoformat(),
+            }
+            for p in stale_projects
         ],
         "due_milestones": [
             {
@@ -409,17 +436,16 @@ def pi_dashboard(
     for r in db.scalars(
         select(WeeklyReport)
         .options(joinedload(WeeklyReport.member).joinedload(MemberProfile.user))
-        .where(WeeklyReport.status.in_((ReportStatus.SUBMITTED, ReportStatus.REVIEWED)))
-        .order_by(WeeklyReport.updated_at.desc())
+        .where(WeeklyReport.status == ReportStatus.PUBLISHED)
+        .order_by(WeeklyReport.published_at.desc())
         .limit(5)
     ):
         name = r.member.user.name if r.member and r.member.user else ""
-        action = "提交" if r.status == ReportStatus.SUBMITTED else "的周报被审核"
         activity.append(
             {
-                "time": (r.submitted_at or r.updated_at).isoformat(),
+                "time": (r.published_at or r.updated_at).isoformat(),
                 "type": "report",
-                "text": f"{name} {action} {r.week_start} 周报",
+                "text": f"{name} 发布了 {r.week_start} 周报",
             }
         )
     for t in db.scalars(
@@ -457,7 +483,7 @@ def pi_dashboard(
             "kpis": kpis,
             "members": member_rows,
             "projects": project_rows,
-            "todo": todo,
+            "attention": attention,
             "activity": activity,
         }
     )
@@ -520,7 +546,7 @@ def student_dashboard(
         select(EquipmentBooking)
         .where(
             EquipmentBooking.user_id == uid,
-            EquipmentBooking.status == BookingStatus.APPROVED,
+            EquipmentBooking.status == BookingStatus.RESERVED,
             EquipmentBooking.end_time > utcnow(),
         )
         .order_by(EquipmentBooking.start_time)
@@ -594,6 +620,24 @@ def student_dashboard(
             {"id": p.id, "name": p.name, "status": p.status, "progress": p.progress}
         )
 
+    my_overdue_borrows = db.scalars(
+        select(EquipmentBorrow)
+        .where(
+            EquipmentBorrow.borrower_id == uid,
+            EquipmentBorrow.status.in_((BorrowStatus.BORROWED, BorrowStatus.OVERDUE)),
+            EquipmentBorrow.expected_return_time < utcnow(),
+        )
+        .order_by(EquipmentBorrow.expected_return_time)
+        .limit(5)
+    ).all()
+    borrow_names = dict(
+        db.execute(
+            select(Equipment.id, Equipment.name).where(
+                Equipment.id.in_({b.equipment_id for b in my_overdue_borrows} or [0])
+            )
+        ).all()
+    )
+
     return ok(
         {
             "kpis": {
@@ -606,6 +650,18 @@ def student_dashboard(
             "tasks": task_rows,
             "bookings": booking_rows,
             "projects": my_projects,
+            "attention": {
+                "overdue_borrows": [
+                    {
+                        "id": b.id,
+                        "equipment_name": borrow_names.get(b.equipment_id),
+                        "expected_return_time": b.expected_return_time.isoformat()
+                        if b.expected_return_time
+                        else None,
+                    }
+                    for b in my_overdue_borrows
+                ],
+            },
             "experiments": [
                 {
                     "id": e.id,

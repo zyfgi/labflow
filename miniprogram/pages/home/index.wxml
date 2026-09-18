@@ -1,0 +1,30 @@
+<view class="card" wx:if="{{user}}">
+  <view class="row" bindtap="goNotifications">
+    <view>
+      <view style="font-weight:600">通知</view>
+      <view class="muted">任务 / 周报 / 设备动态</view>
+    </view>
+    <view class="tag {{unread ? 'danger' : 'info'}}">{{unread}} 未读</view>
+  </view>
+</view>
+
+<view class="card">
+  <view class="card-title">最近动态</view>
+  <view wx:for="{{activity}}" wx:key="index" class="row">
+    <view style="flex:1">{{item.text}}</view>
+    <view class="muted">{{item.time}}</view>
+  </view>
+  <view wx:if="{{!activity.length}}" class="empty">暂无动态</view>
+</view>
+
+<view class="card">
+  <view class="card-title">需关注</view>
+  <view class="row" wx:if="{{attentionCounts.borrows}}">
+    <view>超期借用 {{attentionCounts.borrows}} 件</view>
+    <view class="tag danger">尽快归还</view>
+  </view>
+  <view class="row" wx:if="{{!attentionCounts.borrows}}">
+    <view>一切正常</view>
+    <view class="tag success">无需处理</view>
+  </view>
+</view>

@@ -1,0 +1,66 @@
+<view class="tabs">
+  <view
+    wx:for="{{tabs}}"
+    wx:key="*this"
+    class="tab {{tab === item ? 'active' : ''}}"
+    data-tab="{{item}}"
+    bindtap="switchTab"
+  >
+    {{item === 'projects' ? '项目' : item === 'tasks' ? '任务' : item === 'experiments' ? '实验' : '周报'}}
+  </view>
+</view>
+
+<block wx:if="{{tab === 'projects'}}">
+  <view class="card" wx:for="{{projects}}" wx:key="id">
+    <view class="row">
+      <view style="font-weight:600;flex:1">{{item.name}}</view>
+      <view class="tag">{{item.status}}</view>
+    </view>
+    <view class="muted">负责人：{{item.owner_name || '-'}} · 进度 {{item.progress}}%</view>
+  </view>
+</block>
+
+<block wx:if="{{tab === 'tasks'}}">
+  <view class="card" wx:for="{{tasks}}" wx:key="id">
+    <view class="row">
+      <view style="font-weight:600;flex:1">{{item.title}}</view>
+      <view class="tag {{item.is_overdue ? 'danger' : ''}}">{{item.status}}</view>
+    </view>
+    <view class="muted">{{item.project_name || ''}} {{item.due_date ? '· 截止 ' + item.due_date : ''}}</view>
+  </view>
+</block>
+
+<block wx:if="{{tab === 'experiments'}}">
+  <view class="card" wx:for="{{experiments}}" wx:key="id">
+    <view class="row">
+      <view style="font-weight:600;flex:1">{{item.title}}</view>
+      <view class="tag">{{item.status}}</view>
+    </view>
+    <view class="muted">{{item.experiment_no}}</view>
+  </view>
+</block>
+
+<block wx:if="{{tab === 'reports'}}">
+  <view class="card" wx:for="{{reports}}" wx:key="id">
+    <view class="row">
+      <view style="font-weight:600;flex:1">{{item.member_name}} 的周报</view>
+      <view class="tag {{item.status === 'published' ? 'success' : 'info'}}">
+        {{item.status === 'published' ? '已发布' : '草稿'}}
+      </view>
+    </view>
+    <view class="muted">{{item.week_start}} ~ {{item.week_end}}</view>
+    <view class="muted" style="margin-top:8rpx">{{item.work_summary || '（未填写工作内容）'}}</view>
+    <view style="display:flex;gap:16rpx;margin-top:16rpx">
+      <button
+        wx:if="{{item.status === 'draft'}}"
+        class="btn"
+        size="mini"
+        data-id="{{item.id}}"
+        bindtap="publishReport"
+      >发布</button>
+      <button class="btn" size="mini" plain data-id="{{item.id}}" bindtap="commentReport">评论</button>
+    </view>
+  </view>
+</block>
+
+<view wx:if="{{loading}}" class="empty">加载中…</view>

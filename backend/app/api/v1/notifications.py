@@ -16,12 +16,15 @@ def list_notifications(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     unread_only: bool = False,
+    type: str | None = Query(None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
     stmt = select(Notification).where(Notification.user_id == user.id)
     if unread_only:
         stmt = stmt.where(Notification.is_read.is_(False))
+    if type:
+        stmt = stmt.where(Notification.type == type)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     unread = (
         db.scalar(

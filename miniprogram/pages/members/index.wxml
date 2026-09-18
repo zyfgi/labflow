@@ -1,0 +1,8 @@
+<view class="card" wx:for="{{members}}" wx:key="id">
+  <view class="row">
+    <view style="font-weight:600">{{item.user.name}}</view>
+    <view class="tag">{{item.member_type}}</view>
+  </view>
+  <view class="muted">研究方向：{{item.research_direction || '未填写'}}</view>
+</view>
+<view wx:if="{{!loading && !members.length}}" class="empty">暂无成员</view>

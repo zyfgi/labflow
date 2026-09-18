@@ -191,7 +191,6 @@ def test_due_checker_marks_overdue_and_completes_bookings(
         headers=auth_headers(student),
     )
     # simulate the return deadline passing
-    from app.models.equipment import EquipmentBorrow
 
     borrow_row = (
         db.query(EquipmentBorrow).filter(EquipmentBorrow.equipment_id == eq_id).one()
@@ -214,7 +213,13 @@ def test_due_checker_marks_overdue_and_completes_bookings(
         select(Notification).where(Notification.user_id == student.id)
     ).all()
     assert any(n.type == "task_overdue" for n in notes)
-    assert any(n.type == "borrow_overdue" for n in notes)
+    assert any(n.type == "equipment_overdue" for n in notes)
+
+    # equipment watchers hear about the overdue borrow too
+    admin_notes = db.scalars(
+        select(Notification).where(Notification.user_id == equip_admin.id)
+    ).all()
+    assert any(n.type == "equipment_overdue" for n in admin_notes)
 
     # idempotent within the same day
     stats2 = run_due_checker()

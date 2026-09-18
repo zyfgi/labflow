@@ -2,8 +2,8 @@
 
 - tasks due within 3 days (not done)      -> notify assignee once per day
 - overdue tasks (not done/cancelled)      -> notify assignee once per day
-- overdue borrows                          -> mark overdue + notify borrower
-- approved bookings whose end has passed   -> mark completed (recycle equipment status)
+- overdue borrows                          -> mark overdue + notify borrower & watchers
+- reserved bookings whose end has passed   -> mark completed (recycle equipment status)
 
 Designed to be scheduled daily (cron / Docker sidecar / 手动执行). Idempotent
 within a day via notification dedupe.
@@ -20,6 +20,7 @@ from app.models.enums import BookingStatus, BorrowStatus, EquipmentStatus, TaskS
 from app.models.equipment import Equipment, EquipmentBooking, EquipmentBorrow
 from app.models.project import Task
 from app.models.system import Notification
+from app.services.notifications import equipment_watcher_ids
 
 logger = logging.getLogger("labflow.due_checker")
 
@@ -53,12 +54,7 @@ def run() -> dict:
     now = utcnow()
 
     # ---- tasks due soon / overdue ----
-    open_statuses = (
-        TaskStatus.TODO,
-        TaskStatus.IN_PROGRESS,
-        TaskStatus.BLOCKED,
-        TaskStatus.REVIEW,
-    )
+    open_statuses = (TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED)
     due_soon = db.scalars(
         select(Task).where(
             Task.deleted_at.is_(None),
@@ -113,26 +109,32 @@ def run() -> dict:
     for b in borrows:
         if b.expected_return_time and b.expected_return_time < now:
             b.status = BorrowStatus.OVERDUE
-            if not notified_today(
-                db, b.borrower_id, "borrow_overdue", "equipment_borrow", b.id
-            ):
-                eq = db.get(Equipment, b.equipment_id)
+            eq = db.get(Equipment, b.equipment_id)
+            name = eq.name if eq else str(b.equipment_id)
+            recipients = {b.borrower_id}
+            if eq:
+                recipients.update(equipment_watcher_ids(db, eq))
+            for uid in recipients:
+                if notified_today(
+                    db, uid, "equipment_overdue", "equipment_borrow", b.id
+                ):
+                    continue
                 db.add(
                     Notification(
-                        user_id=b.borrower_id,
-                        type="borrow_overdue",
+                        user_id=uid,
+                        type="equipment_overdue",
                         title="借用设备已逾期",
-                        content=f"设备「{eq.name if eq else b.equipment_id}」已超过预定归还时间，请尽快归还",
+                        content=f"设备「{name}」已超过预定归还时间，请尽快归还",
                         related_type="equipment_borrow",
                         related_id=str(b.id),
                     )
                 )
-                stats["borrow_overdue"] += 1
+            stats["borrow_overdue"] += 1
 
-    # ---- finished approved bookings -> completed ----
+    # ---- finished reserved bookings -> completed ----
     finished = db.scalars(
         select(EquipmentBooking).where(
-            EquipmentBooking.status == BookingStatus.APPROVED,
+            EquipmentBooking.status == BookingStatus.RESERVED,
             EquipmentBooking.end_time < now,
         )
     ).all()
@@ -145,7 +147,7 @@ def run() -> dict:
         remaining = db.scalar(
             select(EquipmentBooking.id).where(
                 EquipmentBooking.equipment_id == equipment_id,
-                EquipmentBooking.status == BookingStatus.APPROVED,
+                EquipmentBooking.status == BookingStatus.RESERVED,
                 EquipmentBooking.end_time > now,
             )
         )

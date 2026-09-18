@@ -18,6 +18,29 @@
             <el-input v-model="form.APP_TIMEZONE" />
             <div class="hint">修改后需要重启服务生效</div>
           </el-form-item>
+          <el-form-item label="对外访问地址">
+            <el-input v-model="form.PUBLIC_BASE_URL" placeholder="https://lab.example.edu" />
+            <div class="hint">用于生成设备二维码标签（PUBLIC_BASE_URL/q/{token}）；留空则二维码为站内路径</div>
+          </el-form-item>
+          <el-form-item label="通知中心">
+            <el-switch v-model="form.NOTIFICATION_ENABLED" />
+            <div class="hint">关闭后系统不再产生站内通知（操作仍会留痕）</div>
+          </el-form-item>
+          <el-form-item label="周报发布通知对象">
+            <el-checkbox-group v-model="form.WEEKLY_REPORT_NOTIFY_ROLES">
+              <el-checkbox value="PI">PI</el-checkbox>
+              <el-checkbox value="TEACHER">教师</el-checkbox>
+              <el-checkbox value="STUDENT">学生</el-checkbox>
+            </el-checkbox-group>
+          </el-form-item>
+          <el-form-item label="学生可创建项目">
+            <el-switch v-model="form.STUDENT_CAN_CREATE_PROJECT" />
+            <div class="hint">实验室内部协同优先；关闭后仅 PI/教师可创建项目</div>
+          </el-form-item>
+          <el-form-item label="微信小程序入口">
+            <el-switch v-model="form.WECHAT_MINIPROGRAM_ENABLED" />
+            <div class="hint">开启后小程序可登录（需在 .env 配置 WECHAT_APPID/WECHAT_SECRET）</div>
+          </el-form-item>
         </el-form>
       </el-tab-pane>
 
@@ -105,6 +128,40 @@
         </el-form>
       </el-tab-pane>
 
+      <!-- 微信小程序 -->
+      <el-tab-pane label="微信绑定码" name="wechat">
+        <div class="head-row" style="margin-bottom: 12px">
+          <span style="color: #909399; font-size: 13px">
+            成员首次绑定微信需要：账号密码 + 一次性绑定码（当面交付，30 分钟内有效，只能用一次）
+          </span>
+          <el-button type="primary" :loading="codeCreating" @click="newCode">生成绑定码</el-button>
+        </div>
+        <el-table :data="bindingCodes" size="small" stripe>
+          <el-table-column label="绑定码" width="140">
+            <template #default="{ row }">
+              <span class="mono" style="font-size: 16px; font-weight: 600">{{ row.code }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="备注" min-width="140">
+            <template #default="{ row }">{{ row.remark ?? '-' }}</template>
+          </el-table-column>
+          <el-table-column label="生成时间" width="160">
+            <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+          </el-table-column>
+          <el-table-column label="过期时间" width="160">
+            <template #default="{ row }">{{ formatDateTime(row.expires_at) }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.state === 'valid' ? 'success' : 'info'">
+                {{ { valid: '有效', used: '已使用', expired: '已过期' }[row.state as string] }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <template #empty><el-empty description="还没有生成过绑定码" :image-size="60" /></template>
+        </el-table>
+      </el-tab-pane>
+
       <!-- 部署与安全（只读） -->
       <el-tab-pane label="部署与安全" name="deploy">
         <el-alert type="info" show-icon :closable="false" title="以下为部署级配置，只能通过 .env / 环境变量修改，重启后生效" />
@@ -122,6 +179,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getSettings, testAIConnection, updateSettings } from '@/api/settings'
+import { createBindingCode, listBindingCodes, type BindingCode } from '@/api/wechat'
+import { formatDateTime } from '@/utils/datetime'
 
 const loading = ref(true)
 const saving = ref(false)
@@ -136,6 +195,11 @@ const bootstrap = ref<Record<string, unknown>>({})
 const form = reactive({
   APP_NAME: 'LabFlow',
   APP_TIMEZONE: 'Asia/Shanghai',
+  PUBLIC_BASE_URL: '',
+  NOTIFICATION_ENABLED: true,
+  WEEKLY_REPORT_NOTIFY_ROLES: ['PI', 'TEACHER'] as string[],
+  STUDENT_CAN_CREATE_PROJECT: true,
+  WECHAT_MINIPROGRAM_ENABLED: false,
   AI_ENABLED: false,
   AI_BASE_URL: '',
   AI_MODEL: '',
@@ -192,7 +256,34 @@ async function runTest() {
   }
 }
 
-onMounted(load)
+// ---- wechat binding codes ----
+const bindingCodes = ref<BindingCode[]>([])
+const codeCreating = ref(false)
+
+async function loadCodes() {
+  try {
+    const { data } = await listBindingCodes()
+    bindingCodes.value = data.data
+  } catch {
+    bindingCodes.value = []
+  }
+}
+
+async function newCode() {
+  codeCreating.value = true
+  try {
+    const { data } = await createBindingCode({ ttl_minutes: 30 })
+    ElMessage.success(`绑定码 ${data.data.code} 已生成，请当面交付给成员本人`)
+    await loadCodes()
+  } finally {
+    codeCreating.value = false
+  }
+}
+
+onMounted(() => {
+  load()
+  loadCodes()
+})
 </script>
 
 <style scoped>

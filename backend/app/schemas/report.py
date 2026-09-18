@@ -48,20 +48,28 @@ class WeeklyReportOut(BaseModel):
     need_help: str | None
     self_progress: int
     status: str
-    submitted_at: datetime | None
-    reviewed_at: datetime | None
-    reviewer_id: int | None
-    review_comment: str | None
+    published_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
 
-class ReviewActionRequest(StrictSchema):
-    comment: str | None = Field(default=None, max_length=5000)
+class WeeklyReportCommentCreate(StrictSchema):
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class WeeklyReportCommentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    report_id: int
+    user_id: int
+    content: str
+    created_at: datetime
 
 
 __all__ = [
-    "ReviewActionRequest",
+    "WeeklyReportCommentCreate",
+    "WeeklyReportCommentOut",
     "WeeklyReportCreate",
     "WeeklyReportOut",
     "WeeklyReportUpdate",

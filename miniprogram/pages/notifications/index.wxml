@@ -1,0 +1,23 @@
+<view class="card">
+  <view class="row" bindtap="readAll">
+    <view class="muted">共 {{unread}} 条未读</view>
+    <view class="tag">全部已读</view>
+  </view>
+</view>
+
+<view class="card" wx:for="{{items}}" wx:key="id">
+  <view
+    class="row"
+    data-index="{{index}}"
+    data-type="{{item.type}}"
+    data-related="{{item.related_type === 'equipment' || item.related_type === 'equipment_maintenance' ? item.related_id : ''}}"
+    bindtap="open"
+  >
+    <view style="flex:1">
+      <view style="font-weight:{{item.is_read ? '400' : '600'}}">{{item.title}}</view>
+      <view class="muted">{{item.content}}</view>
+    </view>
+    <view class="tag {{item.is_read ? 'info' : 'danger'}}">{{item.is_read ? '已读' : '未读'}}</view>
+  </view>
+</view>
+<view wx:if="{{!loading && !items.length}}" class="empty">暂无通知</view>

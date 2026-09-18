@@ -56,6 +56,9 @@ class Equipment(Base, TimestampMixin):
         Boolean, default=False, nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    qr_token: Mapped[str | None] = mapped_column(
+        String(64), unique=True, index=True, nullable=True
+    )
 
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, index=True
@@ -84,6 +87,7 @@ class EquipmentBooking(Base, TimestampMixin):
         String(20), default="pending", index=True, nullable=False
     )
 
+    # legacy unused columns from the removed booking approval workflow
     approved_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -115,6 +119,7 @@ class EquipmentBorrow(Base, TimestampMixin):
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # legacy unused column from the removed borrow approval workflow
     approved_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

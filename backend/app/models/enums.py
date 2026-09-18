@@ -49,17 +49,10 @@ PLAN_STATUSES = [
 
 class ReportStatus:
     DRAFT = "draft"
-    SUBMITTED = "submitted"
-    REVIEWED = "reviewed"
-    RETURNED = "returned"
+    PUBLISHED = "published"
 
 
-REPORT_STATUSES = [
-    ReportStatus.DRAFT,
-    ReportStatus.SUBMITTED,
-    ReportStatus.REVIEWED,
-    ReportStatus.RETURNED,
-]
+REPORT_STATUSES = [ReportStatus.DRAFT, ReportStatus.PUBLISHED]
 
 
 class ProjectStatus:
@@ -88,7 +81,6 @@ class TaskStatus:
     TODO = "todo"
     IN_PROGRESS = "in_progress"
     BLOCKED = "blocked"
-    REVIEW = "review"
     DONE = "done"
     CANCELLED = "cancelled"
 
@@ -97,7 +89,6 @@ TASK_STATUSES = [
     TaskStatus.TODO,
     TaskStatus.IN_PROGRESS,
     TaskStatus.BLOCKED,
-    TaskStatus.REVIEW,
     TaskStatus.DONE,
     TaskStatus.CANCELLED,
 ]
@@ -159,17 +150,13 @@ EQUIPMENT_STATUSES = [
 
 
 class BookingStatus:
-    PENDING = "pending"
-    APPROVED = "approved"
-    REJECTED = "rejected"
+    RESERVED = "reserved"
     CANCELLED = "cancelled"
     COMPLETED = "completed"
 
 
 BOOKING_STATUSES = [
-    BookingStatus.PENDING,
-    BookingStatus.APPROVED,
-    BookingStatus.REJECTED,
+    BookingStatus.RESERVED,
     BookingStatus.CANCELLED,
     BookingStatus.COMPLETED,
 ]

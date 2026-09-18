@@ -1,0 +1,12 @@
+.input {
+  background: #f5f7fa;
+  border-radius: 10rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.error {
+  color: #f56c6c;
+  font-size: 26rpx;
+  margin-top: 16rpx;
+}

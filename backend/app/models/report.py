@@ -16,7 +16,7 @@ from app.database import Base
 from app.models.base import TimestampMixin
 
 if TYPE_CHECKING:
-    from app.models.user import MemberProfile
+    from app.models.user import MemberProfile, User
 
 
 class WeeklyReport(Base, TimestampMixin):
@@ -43,8 +43,9 @@ class WeeklyReport(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(
         String(20), default="draft", index=True, nullable=False
     )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # legacy columns from the removed review workflow; kept nullable and unused
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reviewer_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -52,3 +53,26 @@ class WeeklyReport(Base, TimestampMixin):
     review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     member: Mapped["MemberProfile"] = relationship()
+
+    def visible_to(self, user) -> bool:
+        """Published reports are lab-visible; drafts stay private to the author."""
+        if user.member_profile and user.member_profile.id == self.member_id:
+            return True
+        if user.role in ("PI", "TEACHER", "STUDENT"):
+            return self.status == "published"
+        return False
+
+
+class WeeklyReportComment(Base, TimestampMixin):
+    __tablename__ = "weekly_report_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    report_id: Mapped[int] = mapped_column(
+        ForeignKey("weekly_reports.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    content: Mapped[str] = mapped_column(String(2000), nullable=False)
+
+    user: Mapped["User"] = relationship()

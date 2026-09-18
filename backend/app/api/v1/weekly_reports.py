@@ -1,3 +1,11 @@
+"""Weekly reports — light process: draft -> publish, no review workflow.
+
+An author writes a draft, publishes it (the whole lab can then read it), and
+may keep editing even after publishing; every publish/update notifies the
+configured audience and is audited. Teachers and peers give feedback through
+comments instead of approve/return decisions.
+"""
+
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -6,19 +14,21 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, write_audit_log
 from app.core.responses import ok, paged
-from app.core.time import utcnow
+from app.core.time import utcnow, week_start_of
 from app.database import get_db
 from app.models.enums import REPORT_STATUSES, ReportStatus, Role
-from app.models.report import WeeklyReport
+from app.models.report import WeeklyReport, WeeklyReportComment
 from app.models.user import MemberProfile, User
-from app.permissions import is_staff
 from app.schemas.report import (
-    ReviewActionRequest,
+    WeeklyReportCommentCreate,
     WeeklyReportCreate,
     WeeklyReportOut,
     WeeklyReportUpdate,
 )
-from app.services.notifications import create_notification
+from app.services.notifications import (
+    notify,
+    weekly_report_audience_ids,
+)
 
 router = APIRouter(prefix="/weekly-reports", tags=["weekly-reports"])
 
@@ -30,7 +40,7 @@ def _out(report: WeeklyReport) -> dict:
 def _require_own_member(user: User) -> int:
     if not user.member_profile:
         raise HTTPException(
-            status_code=400, detail="当前用户没有成员档案，无法提交周报"
+            status_code=400, detail="当前用户没有成员档案，无法填写周报"
         )
     return user.member_profile.id
 
@@ -47,20 +57,9 @@ def _get_report(db: Session, report_id: int) -> WeeklyReport:
 
 
 def _ensure_can_view(user: User, report: WeeklyReport) -> None:
-    if is_staff(user):
-        return
-    if user.member_profile is None or user.member_profile.id != report.member_id:
+    # read collaboration: published reports are lab-visible, drafts stay private
+    if not report.visible_to(user):
         raise HTTPException(status_code=403, detail="没有查看该周报的权限")
-
-
-def _reviewer_ids(db: Session) -> list[int]:
-    return list(
-        db.scalars(
-            select(User.id).where(
-                User.role.in_([Role.PI, Role.TEACHER]), User.status == "active"
-            )
-        )
-    )
 
 
 @router.get("")
@@ -74,21 +73,28 @@ def list_reports(
 ) -> dict:
     if status and status not in REPORT_STATUSES:
         raise HTTPException(status_code=400, detail="无效的周报状态")
-    if user.role == Role.EQUIPMENT_ADMIN:
-        raise HTTPException(status_code=403, detail="设备管理员无权访问周报模块")
-    if not is_staff(user):
-        profile = user.member_profile
-        if not profile:
-            raise HTTPException(status_code=403, detail="没有成员档案")
-        if member_id is not None and member_id != profile.id:
-            raise HTTPException(status_code=403, detail="只能查看自己的周报")
-        member_id = profile.id
+    if user.role in (Role.EQUIPMENT_ADMIN, Role.GUEST):
+        raise HTTPException(status_code=403, detail="无权访问周报模块")
+
+    profile = user.member_profile
+    is_student = user.role == Role.STUDENT
+    if is_student and profile is None:
+        raise HTTPException(status_code=403, detail="没有成员档案")
 
     stmt = select(WeeklyReport).options(
         joinedload(WeeklyReport.member).joinedload(MemberProfile.user)
     )
-    if member_id:
+    if member_id is not None:
+        own = profile is not None and member_id == profile.id
         stmt = stmt.where(WeeklyReport.member_id == member_id)
+        if is_student and not own:
+            stmt = stmt.where(WeeklyReport.status == ReportStatus.PUBLISHED)
+    elif is_student:
+        # read collaboration: everyone's published reports plus all of mine
+        stmt = stmt.where(
+            (WeeklyReport.status == ReportStatus.PUBLISHED)
+            | (WeeklyReport.member_id == profile.id)
+        )
     if status:
         stmt = stmt.where(WeeklyReport.status == status)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
@@ -122,7 +128,7 @@ def create_report(
     )
     if existing:
         raise HTTPException(
-            status_code=409, detail="该周已有周报，每人每周只能提交一份"
+            status_code=409, detail="该周已有周报，每人每周只能填写一份"
         )
 
     report = WeeklyReport(
@@ -144,8 +150,6 @@ def my_current_week_report(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> dict:
     member_id = _require_own_member(user)
-    from app.core.time import week_start_of
-
     week_start = week_start_of()
     report = db.scalar(
         select(WeeklyReport).where(
@@ -166,7 +170,27 @@ def get_report(
     item = _out(report)
     if report.member and report.member.user:
         item["member_name"] = report.member.user.name
+    item["comments"] = _comments_payload(db, report.id)
     return ok(item)
+
+
+def _comments_payload(db: Session, report_id: int) -> list[dict]:
+    rows = db.scalars(
+        select(WeeklyReportComment)
+        .options(joinedload(WeeklyReportComment.user))
+        .where(WeeklyReportComment.report_id == report_id)
+        .order_by(WeeklyReportComment.created_at)
+    ).all()
+    return [
+        {
+            "id": c.id,
+            "user_id": c.user_id,
+            "user_name": c.user.name if c.user else None,
+            "content": c.content,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        }
+        for c in rows
+    ]
 
 
 @router.patch("/{report_id}")
@@ -180,20 +204,38 @@ def update_report(
     member_id = _require_own_member(user)
     if report.member_id != member_id:
         raise HTTPException(status_code=403, detail="只能修改自己的周报")
-    if report.status not in (ReportStatus.DRAFT, ReportStatus.RETURNED):
-        raise HTTPException(
-            status_code=400, detail="周报已提交，不能修改（如需修改请联系老师退回）"
-        )
     data = body.model_dump(exclude_unset=True)
+    was_published = report.status == ReportStatus.PUBLISHED
     for field, value in data.items():
         setattr(report, field, value)
-    write_audit_log(db, user, "update_weekly_report", "weekly_report", report.id)
+    write_audit_log(
+        db,
+        user,
+        "update_weekly_report",
+        "weekly_report",
+        report.id,
+        {"fields": list(data.keys()), "published": was_published},
+    )
+    if was_published:
+        # published reports stay published; followers just hear about the update
+        notify(
+            db,
+            weekly_report_audience_ids(db, user.id),
+            "weekly_report_updated",
+            "周报更新",
+            f"{user.name} 更新了 {report.week_start} 周报",
+            "weekly_report",
+            report.id,
+            exclude_user_id=user.id,
+        )
     db.commit()
-    return ok(_out(report), message="周报已更新")
+    return ok(
+        _out(report), message="周报已更新" + ("，已通知关注人" if was_published else "")
+    )
 
 
-@router.post("/{report_id}/submit")
-def submit_report(
+@router.post("/{report_id}/publish")
+def publish_report(
     report_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -201,84 +243,65 @@ def submit_report(
     report = _get_report(db, report_id)
     member_id = _require_own_member(user)
     if report.member_id != member_id:
-        raise HTTPException(status_code=403, detail="只能提交自己的周报")
-    if report.status not in (ReportStatus.DRAFT, ReportStatus.RETURNED):
-        raise HTTPException(status_code=400, detail="当前状态不能提交")
-    report.status = ReportStatus.SUBMITTED
-    report.submitted_at = utcnow()
-    for reviewer_id in _reviewer_ids(db):
-        create_notification(
-            db,
-            reviewer_id,
-            "report_submitted",
-            "收到新的周报",
-            f"{user.name} 提交了 {report.week_start} 周报，待审核",
-            "weekly_report",
-            report.id,
-        )
-    write_audit_log(db, user, "submit_weekly_report", "weekly_report", report.id)
+        raise HTTPException(status_code=403, detail="只能发布自己的周报")
+    if report.status == ReportStatus.PUBLISHED:
+        raise HTTPException(status_code=400, detail="周报已发布")
+    report.status = ReportStatus.PUBLISHED
+    report.published_at = utcnow()
+    write_audit_log(db, user, "publish_weekly_report", "weekly_report", report.id)
+    notify(
+        db,
+        weekly_report_audience_ids(db, user.id),
+        "weekly_report_published",
+        "周报发布",
+        f"{user.name} 发布了 {report.week_start} 周报",
+        "weekly_report",
+        report.id,
+        exclude_user_id=user.id,
+    )
     db.commit()
-    return ok(_out(report), message="周报已提交")
+    return ok(_out(report), message="周报已发布，实验室成员可见")
 
 
-@router.post("/{report_id}/review")
-def review_report(
+@router.post("/{report_id}/comments", status_code=201)
+def add_comment(
     report_id: int,
-    body: ReviewActionRequest,
+    body: WeeklyReportCommentCreate,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    if not is_staff(user):
-        raise HTTPException(status_code=403, detail="只有 PI/教师可以审核周报")
+    if user.role in (Role.EQUIPMENT_ADMIN, Role.GUEST):
+        raise HTTPException(status_code=403, detail="无权评论周报")
     report = _get_report(db, report_id)
-    if report.status != ReportStatus.SUBMITTED:
-        raise HTTPException(status_code=400, detail="只有待审核状态的周报可以审核")
-    report.status = ReportStatus.REVIEWED
-    report.reviewed_at = utcnow()
-    report.reviewer_id = user.id
-    report.review_comment = body.comment
-    if report.member and report.member.user_id:
-        create_notification(
-            db,
-            report.member.user_id,
-            "report_reviewed",
-            "周报已审核",
-            f"{user.name} 审核了你的 {report.week_start} 周报"
-            + ("，查看导师意见" if body.comment else ""),
-            "weekly_report",
-            report.id,
-        )
-    write_audit_log(db, user, "review_weekly_report", "weekly_report", report.id)
+    _ensure_can_view(user, report)
+    comment = WeeklyReportComment(
+        report_id=report.id, user_id=user.id, content=body.content
+    )
+    db.add(comment)
+    db.flush()
+    author_user_id = report.member.user_id if report.member else None
+    notify(
+        db,
+        [author_user_id],
+        "weekly_report_commented",
+        "周报收到评论",
+        f"{user.name} 评论了你的 {report.week_start} 周报",
+        "weekly_report",
+        report.id,
+        exclude_user_id=user.id,
+    )
+    write_audit_log(db, user, "comment_weekly_report", "weekly_report", report.id)
     db.commit()
-    return ok(_out(report), message="周报审核完成")
-
-
-@router.post("/{report_id}/return")
-def return_report(
-    report_id: int,
-    body: ReviewActionRequest,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> dict:
-    if not is_staff(user):
-        raise HTTPException(status_code=403, detail="只有 PI/教师可以退回周报")
-    report = _get_report(db, report_id)
-    if report.status != ReportStatus.SUBMITTED:
-        raise HTTPException(status_code=400, detail="只有待审核状态的周报可以退回")
-    report.status = ReportStatus.RETURNED
-    report.reviewed_at = utcnow()
-    report.reviewer_id = user.id
-    report.review_comment = body.comment
-    if report.member and report.member.user_id:
-        create_notification(
-            db,
-            report.member.user_id,
-            "report_returned",
-            "周报被退回",
-            f"{user.name} 退回了你的 {report.week_start} 周报，请修改后重新提交",
-            "weekly_report",
-            report.id,
-        )
-    write_audit_log(db, user, "return_weekly_report", "weekly_report", report.id)
-    db.commit()
-    return ok(_out(report), message="周报已退回")
+    return ok(
+        {
+            "id": comment.id,
+            "report_id": report.id,
+            "user_id": user.id,
+            "user_name": user.name,
+            "content": comment.content,
+            "created_at": comment.created_at.isoformat()
+            if comment.created_at
+            else None,
+        },
+        message="评论已添加",
+    )

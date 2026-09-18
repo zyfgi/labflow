@@ -37,6 +37,7 @@ class RuntimeSettings(StrictSchema):
 
     APP_NAME: str = "LabFlow"
     APP_TIMEZONE: str = "Asia/Shanghai"
+    PUBLIC_BASE_URL: str = ""
     AI_ENABLED: bool = False
     AI_BASE_URL: str = ""
     AI_MODEL: str = ""
@@ -48,6 +49,12 @@ class RuntimeSettings(StrictSchema):
     AI_RATE_LIMIT_PER_MINUTE: int = Field(default=10, ge=1, le=1000)
     AI_RATE_LIMIT_PER_DAY: int = Field(default=100, ge=1, le=100000)
     UPLOAD_MAX_MB: int = Field(default=100, ge=1, le=2048)
+    NOTIFICATION_ENABLED: bool = True
+    WEEKLY_REPORT_NOTIFY_ROLES: list[str] = Field(
+        default_factory=lambda: ["PI", "TEACHER"]
+    )
+    STUDENT_CAN_CREATE_PROJECT: bool = True
+    WECHAT_MINIPROGRAM_ENABLED: bool = False
     ALLOWED_UPLOAD_EXTENSIONS: list[str] = Field(
         default_factory=lambda: [
             "pdf",
@@ -62,6 +69,15 @@ class RuntimeSettings(StrictSchema):
             "md",
         ]
     )
+
+    @field_validator("WEEKLY_REPORT_NOTIFY_ROLES")
+    @classmethod
+    def _check_notify_roles(cls, v: list[str]) -> list[str]:
+        cleaned = [r for r in (role.strip().upper() for role in v) if r]
+        invalid = [r for r in cleaned if r not in ("PI", "TEACHER", "STUDENT")]
+        if invalid:
+            raise ValueError(f"无效的通知角色: {invalid}")
+        return cleaned
 
     @field_validator("APP_TIMEZONE")
     @classmethod

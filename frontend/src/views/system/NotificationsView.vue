@@ -1,8 +1,14 @@
 <template>
   <el-card shadow="never">
     <div class="toolbar">
-      <el-checkbox v-model="unreadOnly" border @change="load(1)">只看未读</el-checkbox>
-      <span></span>
+      <div class="filters">
+        <el-checkbox v-model="unreadOnly" border @change="load(1)">只看未读</el-checkbox>
+        <el-select v-model="typeFilter" clearable placeholder="按类型筛选" style="width: 140px" @change="load(1)">
+          <el-option v-for="g in NOTIFICATION_GROUPS" :key="g.label" :label="g.label" :value="g.types[0]">
+            {{ g.label }}
+          </el-option>
+        </el-select>
+      </div>
       <el-button @click="markAll">全部已读</el-button>
     </div>
 
@@ -40,55 +46,85 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { listNotifications, markRead, readAll, type AppNotification } from '@/api/system'
+import { NOTIFICATION_GROUPS, NOTIFICATION_TYPE_LABELS } from '@/utils/constants'
 import { formatDateTime } from '@/utils/datetime'
 
+const router = useRouter()
 const loading = ref(false)
 const items = ref<AppNotification[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = 20
 const unreadOnly = ref(false)
-
-const TYPE_LABELS: Record<string, string> = {
-  report_submitted: '周报',
-  report_reviewed: '周报',
-  report_returned: '周报',
-  task_assigned: '任务',
-  task_due_soon: '任务',
-  task_overdue: '任务',
-  booking_approved: '设备',
-  booking_rejected: '设备',
-  borrow_overdue: '设备',
-  equipment_fault: '设备',
-  project_added: '项目',
-}
+const typeFilter = ref('')
 
 function typeLabel(type: string): string {
-  return TYPE_LABELS[type] ?? '通知'
+  return NOTIFICATION_TYPE_LABELS[type] ?? '通知'
 }
 
 function typeTag(type: string): string {
   if (type.startsWith('task')) return 'primary'
-  if (type.startsWith('report')) return 'success'
-  if (type.startsWith('borrow') || type === 'equipment_fault' || type === 'booking_rejected') return 'danger'
+  if (type.startsWith('weekly_report')) return 'success'
+  if (type.endsWith('_overdue') || type === 'equipment_fault') return 'danger'
+  if (type.startsWith('equipment') || type.startsWith('maintenance')) return 'warning'
   return 'info'
+}
+
+function filterTypes(): string[] | undefined {
+  if (!typeFilter.value) return undefined
+  const group = NOTIFICATION_GROUPS.find((g) => g.types.includes(typeFilter.value))
+  return group?.types
 }
 
 async function load(p?: number) {
   if (p) page.value = p
   loading.value = true
   try {
+    const types = filterTypes()
+    // the API takes a single type; page through with the first type of the group
     const { data } = await listNotifications({
       page: page.value,
       page_size: pageSize,
       unread_only: unreadOnly.value || undefined,
+      type: typeFilter.value || undefined,
     })
-    items.value = data.data.items
+    let rows = data.data.items
+    if (types && types.length > 1) {
+      rows = rows.filter((n: AppNotification) => types.includes(n.type))
+    }
+    items.value = rows
     total.value = data.data.total
   } finally {
     loading.value = false
+  }
+}
+
+function jumpTo(n: AppNotification) {
+  switch (n.related_type) {
+    case 'project':
+      router.push(`/projects/${n.related_id}`)
+      break
+    case 'task':
+      router.push(`/tasks/${n.related_id}`)
+      break
+    case 'experiment':
+      router.push(`/experiments/${n.related_id}`)
+      break
+    case 'weekly_report':
+      router.push('/weekly-reports')
+      break
+    case 'equipment':
+    case 'equipment_maintenance':
+      router.push(`/equipment/${n.related_id}`)
+      break
+    case 'equipment_borrow':
+      router.push('/equipment-borrows')
+      break
+    default:
+      break
   }
 }
 
@@ -97,6 +133,7 @@ async function openNotice(n: AppNotification) {
     await markRead(n.id)
     n.is_read = true
   }
+  jumpTo(n)
 }
 
 async function markAll() {
@@ -114,6 +151,12 @@ onMounted(() => load())
   gap: 10px;
   margin-bottom: 12px;
   justify-content: space-between;
+}
+
+.filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .notice-row {

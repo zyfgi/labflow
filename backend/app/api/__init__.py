@@ -22,6 +22,7 @@ def register_routers(app: FastAPI) -> None:
         system,
         tasks,
         users,
+        wechat,
         weekly_reports,
     )
 
@@ -41,6 +42,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(equipment.bookings_router, prefix=api_v1_prefix)
     app.include_router(equipment.borrows_router, prefix=api_v1_prefix)
     app.include_router(equipment.maintenance_router, prefix=api_v1_prefix)
+    app.include_router(equipment.qr_router, prefix=api_v1_prefix)
     app.include_router(dashboard.router, prefix=api_v1_prefix)
     app.include_router(notifications.router, prefix=api_v1_prefix)
     app.include_router(search.router, prefix=api_v1_prefix)
@@ -48,3 +50,4 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(audit_logs.router, prefix=api_v1_prefix)
     app.include_router(ai.router, prefix=api_v1_prefix)
     app.include_router(system.router, prefix=api_v1_prefix)
+    app.include_router(wechat.router, prefix=api_v1_prefix)

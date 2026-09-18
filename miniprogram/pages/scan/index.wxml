@@ -1,0 +1,41 @@
+<view wx:if="{{!equipment}}" class="scan-start">
+  <button class="btn block" loading="{{loading}}" bindtap="scan">扫描设备二维码</button>
+  <view class="muted" style="text-align:center;margin-top:20rpx">
+    扫码后可直接预约 / 借用 / 归还 / 上报故障
+  </view>
+</view>
+
+<block wx:else>
+  <view class="card">
+    <view class="row">
+      <view style="font-weight:600;flex:1">{{equipment.name}}</view>
+      <view class="tag {{equipment.status === 'available' ? 'success' : equipment.status === 'fault' ? 'danger' : 'warning'}}">
+        {{equipment.status}}
+      </view>
+    </view>
+    <view class="muted">资产编号 {{equipment.asset_no}} · {{equipment.location || '位置未登记'}}</view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">预约设备（无冲突立即生效）</view>
+    <picker mode="date" bindchange="(e)=>onBookingTime({currentTarget:{dataset:{field:'start'}},detail:e.detail})">
+      <view class="row"><text>开始日期</text><text>{{booking.start || '请选择'}}</text></view>
+    </picker>
+    <picker mode="time" bindchange="(e)=>onBookingTime({currentTarget:{dataset:{field:'start'}},detail:e.detail})">
+      <view class="row"><text>开始时间</text><text>{{booking.start || '请选择'}}</text></view>
+    </picker>
+    <button class="btn block" bindtap="book">预约</button>
+  </view>
+
+  <view class="card">
+    <view class="card-title">借用 / 归还</view>
+    <button class="btn block" bindtap="borrow">立即借出（默认 24 小时）</button>
+    <button class="btn block" style="background:#67c23a;margin-top:16rpx" bindtap="returnBorrow">归还</button>
+  </view>
+
+  <view class="card">
+    <button class="btn block" style="background:#f56c6c" bindtap="reportFault">上报故障</button>
+  </view>
+
+  <button class="btn block" plain style="margin: 20rpx" bindtap="scan">扫其他设备</button>
+</block>

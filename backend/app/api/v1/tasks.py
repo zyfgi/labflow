@@ -22,11 +22,11 @@ from app.schemas.project import (
     TaskStatusRequest,
     TaskUpdate,
 )
-from app.services.notifications import create_notification
+from app.services.notifications import notify
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
-OPEN_STATUSES = ("todo", "in_progress", "blocked", "review")
+OPEN_STATUSES = ("todo", "in_progress", "blocked")
 DONE_STATUSES = ("done", "cancelled")
 
 
@@ -187,14 +187,15 @@ def create_task(
     db.add(task)
     db.flush()
     if task.assignee_id and task.assignee_id != user.id:
-        create_notification(
+        notify(
             db,
-            task.assignee_id,
+            [task.assignee_id],
             "task_assigned",
             "新任务分配",
             f"「{task.title}」由 {user.name} 分配给你，项目：{project.name}",
             "task",
             task.id,
+            exclude_user_id=user.id,
         )
     write_audit_log(db, user, "create_task", "task", task.id, {"title": task.title})
     db.commit()
@@ -241,6 +242,7 @@ def update_task(
         raise HTTPException(status_code=403, detail="只有项目管理方可以编辑任务信息")
     data = body.model_dump(exclude_unset=True)
     old_assignee = task.assignee_id
+    old_due = task.due_date
     for field, value in data.items():
         setattr(task, field, value)
     _validate_relations(db, task, project)
@@ -249,19 +251,39 @@ def update_task(
             task.completed_at = utcnow()
     else:
         task.completed_at = None
-    if (
-        task.assignee_id
-        and task.assignee_id != old_assignee
-        and task.assignee_id != user.id
-    ):
-        create_notification(
+    if task.assignee_id != old_assignee:
+        if old_assignee:
+            notify(
+                db,
+                [old_assignee],
+                "task_reassigned",
+                "任务已改派",
+                f"任务「{task.title}」已改派给他人（{user.name} 操作）",
+                "task",
+                task.id,
+                exclude_user_id=user.id,
+            )
+        if task.assignee_id:
+            notify(
+                db,
+                [task.assignee_id],
+                "task_assigned" if old_assignee is None else "task_reassigned",
+                "新任务分配" if old_assignee is None else "任务转给你",
+                f"「{task.title}」（项目：{project.name}）分配给你，由 {user.name} 操作",
+                "task",
+                task.id,
+                exclude_user_id=user.id,
+            )
+    elif task.due_date != old_due and task.assignee_id:
+        notify(
             db,
-            task.assignee_id,
-            "task_assigned",
-            "新任务分配",
-            f"「{task.title}」分配给你，由 {user.name} 更新",
+            [task.assignee_id],
+            "task_due_changed",
+            "任务截止时间变更",
+            f"任务「{task.title}」截止时间变更为 {task.due_date}",
             "task",
             task.id,
+            exclude_user_id=user.id,
         )
     write_audit_log(
         db, user, "update_task", "task", task.id, {"fields": list(data.keys())}
@@ -285,6 +307,18 @@ def update_task_status(
     write_audit_log(
         db, user, "update_task_status", "task", task.id, {"status": body.status}
     )
+    if body.status == "done":
+        # completion needs no approval; the creator hears about it
+        notify(
+            db,
+            [task.creator_id],
+            "task_completed",
+            "任务完成",
+            f"{user.name} 将任务「{task.title}」标记为完成",
+            "task",
+            task.id,
+            exclude_user_id=user.id,
+        )
     db.commit()
     return ok(_out(task), message="任务状态已更新")
 

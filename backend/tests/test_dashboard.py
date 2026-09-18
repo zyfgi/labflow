@@ -8,12 +8,27 @@ def test_pi_dashboard_shape(client, db, pi, student):
     resp = client.get("/api/v1/dashboard/pi", headers=headers)
     assert resp.status_code == 200
     data = resp.json()["data"]
-    assert set(data.keys()) == {"kpis", "members", "projects", "todo", "activity"}
+    assert set(data.keys()) == {
+        "kpis",
+        "members",
+        "projects",
+        "attention",
+        "activity",
+    }
     kpis = data["kpis"]
     assert kpis["member_total"] >= 1
     assert 0 <= kpis["weekly_report_rate"] <= 100
     assert isinstance(data["members"], list)
     assert isinstance(data["projects"], list)
+    # attention replaces the old approval inbox: hints, never blockers
+    attention = data["attention"]
+    assert set(attention.keys()) == {
+        "overdue_tasks",
+        "overdue_borrows",
+        "fault_equipment",
+        "stale_projects",
+        "due_milestones",
+    }
 
 
 def test_student_cannot_access_pi_dashboard(client, db, student):

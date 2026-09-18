@@ -19,7 +19,7 @@ export interface SearchResult {
   equipment: { id: number; name: string; asset_no: string; status: string }[]
 }
 
-export function listNotifications(params: { page?: number; page_size?: number; unread_only?: boolean } = {}) {
+export function listNotifications(params: { page?: number; page_size?: number; unread_only?: boolean; type?: string } = {}) {
   return client.get<{ data: { items: AppNotification[]; total: number; unread: number } }>(
     '/notifications',
     { params },

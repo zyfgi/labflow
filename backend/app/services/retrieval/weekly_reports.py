@@ -1,12 +1,10 @@
 """Weekly report retrieval.
 
-Permission rule mirrors the WeeklyReport API exactly:
+Permission rule mirrors the WeeklyReport API:
 - PI / TEACHER: all reports
-- others with a member profile: only their own reports
-- GUEST / no profile: nothing
-
-A student asking about someone else's reports therefore gets zero hits from
-the scope itself — no existence signal, no side channel.
+- students with a member profile: their own reports (any status) plus
+  everyone else's published reports
+- GUEST / EQUIPMENT_ADMIN / no profile: nothing
 """
 
 from datetime import timedelta
@@ -15,6 +13,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.time import time_range
+from app.models.enums import ReportStatus
 from app.models.report import WeeklyReport
 from app.models.user import MemberProfile, User
 from app.permissions import is_teaching_staff
@@ -41,13 +40,16 @@ def search_weekly_reports(
     use_keywords: bool = True,
 ) -> list[RetrievalHit]:
     stmt = select(WeeklyReport)
+    profile: MemberProfile | None = user.member_profile
     if is_teaching_staff(user):
         pass  # full visibility
+    elif profile is not None:
+        stmt = stmt.where(
+            (WeeklyReport.status == ReportStatus.PUBLISHED)
+            | (WeeklyReport.member_id == profile.id)
+        )
     else:
-        profile: MemberProfile | None = user.member_profile
-        if profile is None:
-            return []
-        stmt = stmt.where(WeeklyReport.member_id == profile.id)
+        return []
 
     member_id: int | None
     if plan.mine_only:
@@ -132,7 +134,6 @@ def search_weekly_reports(
                     "week_start": r.week_start.isoformat(),
                     "week_end": (r.week_start + timedelta(days=6)).isoformat(),
                     "member_name": member_names.get(r.member_id),
-                    "review_comment": truncate(r.review_comment, 120) or None,
                     "context": {
                         "member_name": member_names.get(r.member_id),
                         "week_start": r.week_start.isoformat(),
@@ -143,7 +144,6 @@ def search_weekly_reports(
                         "problems": truncate(r.problems, 400),
                         "next_week_plan": truncate(r.next_week_plan, 400),
                         "need_help": truncate(r.need_help, 300),
-                        "review_comment": truncate(r.review_comment, 300),
                     },
                 },
             )

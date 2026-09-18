@@ -31,6 +31,10 @@ class User(Base, TimestampMixin):
         Boolean, default=False, nullable=False
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    wechat_openid: Mapped[str | None] = mapped_column(
+        String(64), unique=True, index=True, nullable=True
+    )
+    wechat_bound_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     member_profile: Mapped["MemberProfile | None"] = relationship(
         back_populates="user", uselist=False, lazy="joined"

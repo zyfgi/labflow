@@ -31,7 +31,7 @@
     </div>
 
     <el-table v-loading="loading" :data="items" stripe>
-      <el-table-column v-if="auth.canManage" label="成员" width="110">
+      <el-table-column label="成员" width="110">
         <template #default="{ row }">{{ row.member_name }}</template>
       </el-table-column>
       <el-table-column label="周次" width="130">
@@ -51,35 +51,19 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="提交时间" width="160">
-        <template #default="{ row }">{{ formatDateTime(row.submitted_at) }}</template>
+      <el-table-column label="发布时间" width="160">
+        <template #default="{ row }">{{ formatDateTime(row.published_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="210" fixed="right">
+      <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" size="small" @click="viewDetail(row)">详情</el-button>
-          <template v-if="!auth.canManage && isMine(row)">
-            <el-button
-              v-if="row.status === 'draft' || row.status === 'returned'"
-              link
-              type="primary"
-              size="small"
-              @click="openForm(row)"
-            >
+          <template v-if="isMine(row)">
+            <el-button v-if="row.status === 'draft'" link type="primary" size="small" @click="openForm(row)">
               编辑
             </el-button>
-            <el-button
-              v-if="row.status === 'draft' || row.status === 'returned'"
-              link
-              type="success"
-              size="small"
-              @click="submit(row)"
-            >
-              提交
+            <el-button v-if="row.status === 'draft'" link type="success" size="small" @click="publish(row)">
+              发布
             </el-button>
-          </template>
-          <template v-if="auth.canManage && row.status === 'submitted'">
-            <el-button link type="success" size="small" @click="review(row, 'review')">通过</el-button>
-            <el-button link type="danger" size="small" @click="review(row, 'return')">退回</el-button>
           </template>
         </template>
       </el-table-column>
@@ -98,7 +82,7 @@
       />
     </div>
 
-    <!-- form dialog (student) -->
+    <!-- form dialog (author) -->
     <el-dialog v-model="form.visible" :title="form.isCreate ? '撰写本周周报' : '编辑周报'" width="680px" top="5vh">
       <el-form label-width="90px">
         <el-form-item label="周次">
@@ -128,11 +112,13 @@
       </el-form>
       <template #footer>
         <el-button @click="form.visible = false">取消</el-button>
-        <el-button type="primary" :loading="form.saving" @click="save">保存草稿</el-button>
+        <el-button type="primary" :loading="form.saving" @click="save">
+          {{ form.wasPublished ? '保存并通知关注人' : '保存草稿' }}
+        </el-button>
       </template>
     </el-dialog>
 
-    <!-- detail dialog -->
+    <!-- detail dialog with comments -->
     <el-dialog v-model="detail.visible" title="周报详情" width="680px" top="5vh">
       <el-descriptions :column="1" border>
         <el-descriptions-item label="成员">{{ detail.row?.member_name }}</el-descriptions-item>
@@ -144,11 +130,30 @@
         <el-descriptions-item label="下周计划">{{ detail.row?.next_week_plan || '-' }}</el-descriptions-item>
         <el-descriptions-item label="需要帮助">{{ detail.row?.need_help || '-' }}</el-descriptions-item>
         <el-descriptions-item label="自评进度">{{ detail.row?.self_progress }}%</el-descriptions-item>
-        <el-descriptions-item label="导师意见">
-          <span v-if="detail.row?.review_comment">{{ detail.row.review_comment }}</span>
-          <span v-else style="color: #909399">暂无</span>
-        </el-descriptions-item>
       </el-descriptions>
+
+      <div class="comments">
+        <h4>评论</h4>
+        <div v-if="!detail.comments.length" class="muted">暂无评论</div>
+        <div v-for="c in detail.comments" :key="c.id" class="comment">
+          <div class="comment-head">
+            <b>{{ c.user_name }}</b>
+            <span class="muted">{{ formatDateTime(c.created_at) }}</span>
+          </div>
+          <div>{{ c.content }}</div>
+        </div>
+        <div class="comment-input">
+          <el-input
+            v-model="detail.draft"
+            type="textarea"
+            :rows="2"
+            placeholder="给点建议或提醒（发布后周报作者会收到通知）"
+          />
+          <el-button type="primary" :disabled="!detail.draft.trim()" :loading="detail.sending" @click="sendComment">
+            评论
+          </el-button>
+        </div>
+      </div>
     </el-dialog>
   </el-card>
 </template>
@@ -157,14 +162,15 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  addReportComment,
   createReport,
+  getReport,
   listReports,
   myCurrentWeekReport,
-  returnReport,
-  reviewReport,
-  submitReport,
+  publishReport,
   updateReport,
   type WeeklyReport,
+  type WeeklyReportComment,
 } from '@/api/reports'
 import { REPORT_STATUS_LABELS, REPORT_STATUS_TAGS } from '@/utils/constants'
 import ExportButton from '@/components/ExportButton.vue'
@@ -178,6 +184,7 @@ const items = ref<WeeklyReport[]>([])
 const total = ref(0)
 const members = ref<Member[]>([])
 const currentReport = ref<WeeklyReport | null>(null)
+const myMemberId = ref<number | null>(null)
 
 const query = reactive<{ page: number; page_size: number; member_id?: number; status: string }>({
   page: 1,
@@ -187,7 +194,7 @@ const query = reactive<{ page: number; page_size: number; member_id?: number; st
 })
 
 function isMine(row: WeeklyReport): boolean {
-  return !auth.canManage
+  return myMemberId.value != null && row.member_id === myMemberId.value
 }
 
 async function load(page?: number) {
@@ -211,6 +218,7 @@ const form = reactive({
   visible: false,
   saving: false,
   isCreate: true,
+  wasPublished: false,
   editingId: 0,
   weekLabel: '',
   week: '',
@@ -225,38 +233,32 @@ const form = reactive({
   },
 })
 
+function fillForm(existing: WeeklyReport) {
+  form.isCreate = false
+  form.wasPublished = existing.status === 'published'
+  form.editingId = existing.id
+  form.week = existing.week_start
+  form.data = {
+    work_summary: existing.work_summary ?? '',
+    learning_summary: existing.learning_summary ?? '',
+    experiment_summary: existing.experiment_summary ?? '',
+    problems: existing.problems ?? '',
+    next_week_plan: existing.next_week_plan ?? '',
+    need_help: existing.need_help ?? '',
+    self_progress: existing.self_progress,
+  }
+}
+
 async function openForm(existing?: WeeklyReport) {
   if (existing) {
-    form.isCreate = false
-    form.editingId = existing.id
-    form.week = existing.week_start
-    form.data = {
-      work_summary: existing.work_summary ?? '',
-      learning_summary: existing.learning_summary ?? '',
-      experiment_summary: existing.experiment_summary ?? '',
-      problems: existing.problems ?? '',
-      next_week_plan: existing.next_week_plan ?? '',
-      need_help: existing.need_help ?? '',
-      self_progress: existing.self_progress,
-    }
+    fillForm(existing)
   } else {
     const cur = await myCurrentWeekReport()
     if (cur.data.data) {
-      existing = cur.data.data
-      form.isCreate = false
-      form.editingId = existing.id
-      form.week = existing.week_start
-      form.data = {
-        work_summary: existing.work_summary ?? '',
-        learning_summary: existing.learning_summary ?? '',
-        experiment_summary: existing.experiment_summary ?? '',
-        problems: existing.problems ?? '',
-        next_week_plan: existing.next_week_plan ?? '',
-        need_help: existing.need_help ?? '',
-        self_progress: existing.self_progress,
-      }
+      fillForm(cur.data.data)
     } else {
       form.isCreate = true
+      form.wasPublished = false
       form.week = currentWeekStart()
       form.data = { work_summary: '', learning_summary: '', experiment_summary: '', problems: '', next_week_plan: '', need_help: '', self_progress: 0 }
     }
@@ -270,10 +272,10 @@ async function save() {
   try {
     if (form.isCreate) {
       await createReport({ week_start: form.week, ...form.data })
-      ElMessage.success('草稿已保存，请点击提交')
+      ElMessage.success('草稿已保存，发布后实验室成员可见')
     } else {
       await updateReport(form.editingId, { ...form.data })
-      ElMessage.success('周报已更新')
+      ElMessage.success(form.wasPublished ? '已更新并通知关注人' : '周报已更新')
     }
     form.visible = false
     await load(1)
@@ -283,42 +285,54 @@ async function save() {
   }
 }
 
-async function submit(row: WeeklyReport) {
-  await ElMessageBox.confirm(`确认提交 ${row.week_start} 周报？提交后需老师退回才能修改。`, '提示', { type: 'info' })
-  await submitReport(row.id)
-  ElMessage.success('已提交')
+async function publish(row: WeeklyReport) {
+  await ElMessageBox.confirm(
+    `发布 ${row.week_start} 周报？发布后实验室成员可见，之后仍可继续修改。`,
+    '发布周报',
+    { type: 'info', confirmButtonText: '发布', cancelButtonText: '再改改' },
+  )
+  await publishReport(row.id)
+  ElMessage.success('已发布，相关老师会收到通知')
   await load()
   await loadCurrent()
 }
 
-async function review(row: WeeklyReport, action: 'review' | 'return') {
-  const { value } = await ElMessageBox.prompt(
-    action === 'review' ? '审核意见（可选）' : '退回原因（将通知学生）',
-    action === 'review' ? '通过周报' : '退回周报',
-    { inputType: 'textarea', inputValue: '', confirmButtonText: '确认', cancelButtonText: '取消' },
-  ).catch(() => ({ value: undefined }))
-  if (value === undefined) return
-  if (action === 'review') {
-    await reviewReport(row.id, value || undefined)
-    ElMessage.success('已审核')
-  } else {
-    await returnReport(row.id, value || undefined)
-    ElMessage.success('已退回')
-  }
-  await load()
+const detail = reactive({
+  visible: false,
+  row: null as WeeklyReport | null,
+  comments: [] as WeeklyReportComment[],
+  draft: '',
+  sending: false,
+})
+
+async function viewDetail(row: WeeklyReport) {
+  detail.row = row
+  detail.draft = ''
+  const { data } = await getReport(row.id)
+  detail.comments = data.data.comments ?? []
+  detail.row = data.data
+  detail.visible = true
 }
 
-const detail = reactive({ visible: false, row: null as WeeklyReport | null })
-
-function viewDetail(row: WeeklyReport) {
-  detail.row = row
-  detail.visible = true
+async function sendComment() {
+  if (!detail.row || !detail.draft.trim()) return
+  detail.sending = true
+  try {
+    await addReportComment(detail.row.id, detail.draft.trim())
+    detail.draft = ''
+    const { data } = await getReport(detail.row.id)
+    detail.comments = data.data.comments ?? []
+    ElMessage.success('评论已添加')
+  } finally {
+    detail.sending = false
+  }
 }
 
 async function loadCurrent() {
   if (!auth.canManage) {
     const res = await myCurrentWeekReport()
     currentReport.value = res.data.data
+    if (res.data.data) myMemberId.value = res.data.data.member_id
   }
 }
 
@@ -353,5 +367,41 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   margin-top: 12px;
+}
+
+.comments {
+  margin-top: 16px;
+}
+
+.comments h4 {
+  margin: 0 0 8px;
+}
+
+.muted {
+  color: #909399;
+  font-size: 13px;
+}
+
+.comment {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--el-border-color-lighter);
+  font-size: 14px;
+}
+
+.comment-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.comment-input {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-top: 12px;
+}
+
+.comment-input .el-button {
+  flex-shrink: 0;
 }
 </style>

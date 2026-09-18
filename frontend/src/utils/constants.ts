@@ -1,6 +1,6 @@
-// 统一状态语义颜色:
-// success=completed/available/approved, warning=pending/blocked/maintenance,
-// danger=overdue/fault/rejected, info=draft/archived/paused, primary=active/in_progress
+// 统一状态语义颜色（轻流程协同）:
+// success=正常完成/可用, warning=需关注(受阻/维修/临期),
+// danger=真正异常(故障/逾期), info=新动态/草稿/归档, primary=active/in_progress
 export type TagType = 'success' | 'warning' | 'danger' | 'info' | 'primary'
 
 export const ROLE_LABELS: Record<string, string> = {
@@ -49,16 +49,12 @@ export const PLAN_STATUS_TAGS: Record<string, TagType> = {
 
 export const REPORT_STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
-  submitted: '待审核',
-  reviewed: '已审核',
-  returned: '已退回',
+  published: '已发布',
 }
 
 export const REPORT_STATUS_TAGS: Record<string, TagType> = {
   draft: 'info',
-  submitted: 'warning',
-  reviewed: 'success',
-  returned: 'danger',
+  published: 'success',
 }
 
 export const PROJECT_STATUS_LABELS: Record<string, string> = {
@@ -109,7 +105,6 @@ export const TASK_STATUS_LABELS: Record<string, string> = {
   todo: '待开始',
   in_progress: '进行中',
   blocked: '受阻',
-  review: '待复核',
   done: '已完成',
   cancelled: '已取消',
 }
@@ -118,7 +113,6 @@ export const TASK_STATUS_TAGS: Record<string, TagType> = {
   todo: 'info',
   in_progress: 'primary',
   blocked: 'warning',
-  review: 'warning',
   done: 'success',
   cancelled: 'info',
 }
@@ -160,17 +154,13 @@ export const EQUIPMENT_STATUS_TAGS: Record<string, TagType> = {
 }
 
 export const BOOKING_STATUS_LABELS: Record<string, string> = {
-  pending: '待审批',
-  approved: '已批准',
-  rejected: '已拒绝',
+  reserved: '已预约',
   cancelled: '已取消',
   completed: '已完成',
 }
 
 export const BOOKING_STATUS_TAGS: Record<string, TagType> = {
-  pending: 'warning',
-  approved: 'success',
-  rejected: 'danger',
+  reserved: 'primary',
   cancelled: 'info',
   completed: 'success',
 }
@@ -207,3 +197,16 @@ export const MAINTENANCE_TYPE_LABELS: Record<string, string> = {
   calibration: '校准',
   inspection: '巡检',
 }
+
+// 通知事件分组（轻流程：通知替代审批，仅已读/未读，无需确认）
+export const NOTIFICATION_GROUPS: { label: string; types: string[] }[] = [
+  { label: '项目与任务', types: ['project_created', 'project_member_added', 'task_assigned', 'task_reassigned', 'task_due_changed', 'task_completed', 'task_due_soon', 'task_overdue'] },
+  { label: '周报', types: ['weekly_report_published', 'weekly_report_updated', 'weekly_report_commented'] },
+  { label: '实验', types: ['experiment_created', 'experiment_updated', 'experiment_locked', 'experiment_unlocked'] },
+  { label: '设备', types: ['equipment_booked', 'equipment_booking_cancelled', 'equipment_borrowed', 'equipment_returned', 'equipment_overdue', 'equipment_fault', 'maintenance_updated'] },
+  { label: '微信', types: ['wechat_bound', 'wechat_unbound'] },
+]
+
+export const NOTIFICATION_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+  NOTIFICATION_GROUPS.flatMap((g) => g.types.map((t) => [t, g.label])),
+)

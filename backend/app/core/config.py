@@ -37,6 +37,11 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost"
 
+    # WeChat miniprogram: backend-only credentials for code2Session.
+    # When unset, the dev mock accepts codes of the form "mock:<openid>".
+    WECHAT_APPID: str = ""
+    WECHAT_SECRET: str = ""
+
     UPLOAD_DIR: str = "../storage"
     UPLOAD_MAX_MB: int = 100
 

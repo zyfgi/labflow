@@ -1,5 +1,7 @@
 """Equipment / maintenance / booking retrieval (visible to lab members)."""
 
+from datetime import timedelta
+
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -124,7 +126,10 @@ def search_maintenance(
     if date_from:
         stmt = stmt.where(EquipmentMaintenance.reported_at >= date_from)
     if date_to:
-        stmt = stmt.where(EquipmentMaintenance.reported_at <= date_to)
+        # reported_at is a timestamp; an inclusive day bound must extend to midnight
+        stmt = stmt.where(
+            EquipmentMaintenance.reported_at < date_to + timedelta(days=1)
+        )
 
     rows = db.scalars(
         stmt.order_by(EquipmentMaintenance.reported_at.desc()).limit(limit * 2)
@@ -212,7 +217,7 @@ def search_bookings(
     if date_from:
         stmt = stmt.where(EquipmentBooking.start_time >= date_from)
     if date_to:
-        stmt = stmt.where(EquipmentBooking.start_time <= f"{date_to} 23:59:59")
+        stmt = stmt.where(EquipmentBooking.start_time < date_to + timedelta(days=1))
 
     rows = db.scalars(
         stmt.order_by(EquipmentBooking.start_time.desc()).limit(limit * 2)

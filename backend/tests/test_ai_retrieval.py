@@ -160,7 +160,9 @@ def test_member_and_learning_plan_retrieval_for_staff(client, db, pi, student):
     plan, hits = retrieve(db, pi, "检索员姓名 最近有什么学习计划")
     types = {h.source_type for h in hits}
     assert "member" in types and "learning_plan" in types
-    assert any(h.title == "检索计划目标" for h in hits if h.source_type == "learning_plan")
+    assert any(
+        h.title == "检索计划目标" for h in hits if h.source_type == "learning_plan"
+    )
     assert any(h.title == "检索员姓名" for h in hits if h.source_type == "member")
 
     # student asking about someone else's member data: nothing leaks
@@ -173,12 +175,20 @@ def test_equipment_booking_and_own_report_paths(client, db, pi, equip_admin, stu
 
     from tests.factories import create_booking, create_equipment
 
-    equipment_id = create_equipment(client, equip_admin, "RT-EQ-1", name="检 Pickup设备")
+    equipment_id = create_equipment(
+        client, equip_admin, "RT-EQ-1", name="检 Pickup设备"
+    )
     from app.core.time import app_today
 
     base = datetime.combine(app_today(), datetime.min.time())
     fmt = "%Y-%m-%dT%H:%M:%S"
-    create_booking(client, student, equipment_id, base.strftime(fmt), (base + timedelta(hours=2)).strftime(fmt))
+    create_booking(
+        client,
+        student,
+        equipment_id,
+        base.strftime(fmt),
+        (base + timedelta(hours=2)).strftime(fmt),
+    )
     client.post(
         "/api/v1/weekly-reports",
         json={"week_start": "2026-09-14", "work_summary": "采集了 Pickup 数据"},
@@ -192,4 +202,8 @@ def test_equipment_booking_and_own_report_paths(client, db, pi, equip_admin, stu
 
     # student's own report question: person-scoped, no keyword dependence
     plan2, hits2 = retrieve(db, student, "我最近的周报写了什么")
-    assert any(h.source_type == "weekly_report" and "Pickup" in (h.metadata.get("context", {}).get("work_summary") or "") for h in hits2)
+    assert any(
+        h.source_type == "weekly_report"
+        and "Pickup" in (h.metadata.get("context", {}).get("work_summary") or "")
+        for h in hits2
+    )

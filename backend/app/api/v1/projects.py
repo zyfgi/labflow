@@ -22,7 +22,7 @@ from app.schemas.project import (
     ProjectOut,
     ProjectUpdate,
 )
-from app.services.notifications import create_notification
+from app.services.notifications import notify, user_ids_with_roles
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -119,8 +119,15 @@ def create_project(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    if user.role not in ("PI", "TEACHER"):
-        raise HTTPException(status_code=403, detail="只有 PI/教师可以创建项目")
+    from app.services import runtime_settings
+
+    student_allowed = runtime_settings.effective(db).STUDENT_CAN_CREATE_PROJECT
+    if user.role == "STUDENT" and not student_allowed:
+        raise HTTPException(
+            status_code=403, detail="当前设置不允许学生创建项目，请联系 PI"
+        )
+    if user.role not in ("PI", "TEACHER", "STUDENT"):
+        raise HTTPException(status_code=403, detail="没有创建项目的权限")
     if db.scalar(select(Project).where(Project.code == body.code)):
         raise HTTPException(status_code=409, detail="项目编号已存在")
     project = Project(**body.model_dump(), owner_id=user.id)
@@ -129,6 +136,16 @@ def create_project(
     db.add(ProjectMember(project_id=project.id, user_id=user.id, project_role="owner"))
     write_audit_log(
         db, user, "create_project", "project", project.id, {"code": project.code}
+    )
+    notify(
+        db,
+        user_ids_with_roles(db, ("PI",)),
+        "project_created",
+        "新项目创建",
+        f"{user.name} 创建了项目「{project.name}」",
+        "project",
+        project.id,
+        exclude_user_id=user.id,
     )
     db.commit()
     return ok(_out(project, user.name), message="项目创建成功")
@@ -280,14 +297,15 @@ def add_project_member(
             project_id=project_id, user_id=body.user_id, project_role=body.project_role
         )
     )
-    create_notification(
+    notify(
         db,
-        body.user_id,
-        "project_added",
+        [body.user_id],
+        "project_member_added",
         "加入项目",
         f"你被加入项目「{project.name}」",
         "project",
         project.id,
+        exclude_user_id=user.id,
     )
     write_audit_log(
         db, user, "add_project_member", "project", project_id, {"user_id": body.user_id}

@@ -87,7 +87,6 @@ HEADERS = {
         "问题",
         "下周计划",
         "自评进度",
-        "导师意见",
     ],
     "tasks": [
         "ID",
@@ -162,7 +161,6 @@ def export(
                     (r.problems or "").replace("\n", " "),
                     (r.next_week_plan or "").replace("\n", " "),
                     r.self_progress,
-                    (r.review_comment or "").replace("\n", " "),
                 ]
             )
     elif kind == "tasks":

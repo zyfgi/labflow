@@ -1,6 +1,6 @@
 <template>
   <el-container class="layout">
-    <el-aside :width="collapse ? '64px' : '220px'" class="aside">
+    <el-aside v-if="!isMobile" :width="collapse ? '64px' : '220px'" class="aside">
       <div class="logo">
         <span class="logo-badge">LF</span>
         <span v-if="!collapse" class="logo-text">LabFlow</span>
@@ -37,20 +37,61 @@
       </el-menu>
     </el-aside>
 
+    <!-- mobile (<768px): the sidebar becomes a drawer -->
+    <el-drawer v-model="drawerOpen" direction="ltr" size="220px" :with-header="false" class="mobile-drawer">
+      <div class="aside drawer-body">
+        <div class="logo">
+          <span class="logo-badge">LF</span>
+          <span class="logo-text">LabFlow</span>
+        </div>
+        <el-menu
+          :default-active="activeMenu"
+          router
+          class="menu"
+          background-color="#1f2d3d"
+          text-color="#bfcbd9"
+          active-text-color="#409eff"
+          @select="drawerOpen = false"
+        >
+          <template v-for="item in visibleMenu" :key="item.index">
+            <el-sub-menu v-if="item.children" :index="item.index">
+              <template #title>
+                <el-icon><component :is="item.icon" /></el-icon>
+                <span>{{ item.label }}</span>
+              </template>
+              <el-menu-item
+                v-for="child in item.children"
+                :key="child.index"
+                :index="child.index"
+                :route="child.route"
+              >
+                {{ child.label }}
+              </el-menu-item>
+            </el-sub-menu>
+            <el-menu-item v-else :index="item.index" :route="item.route">
+              <el-icon><component :is="item.icon" /></el-icon>
+              <template #title>{{ item.label }}</template>
+            </el-menu-item>
+          </template>
+        </el-menu>
+      </div>
+    </el-drawer>
+
     <el-container>
       <el-header class="header" height="50px">
         <div class="header-left">
-          <el-icon class="collapse-btn" @click="collapse = !collapse">
-            <Expand v-if="collapse" />
+          <el-icon class="collapse-btn" @click="toggleSidebar">
+            <Expand v-if="collapse && !isMobile" />
+            <Fold v-else-if="!isMobile" />
             <Fold v-else />
           </el-icon>
-          <el-breadcrumb separator="/">
+          <el-breadcrumb v-if="!isMobile" separator="/">
             <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
             <el-breadcrumb-item v-if="route.meta.title">{{ route.meta.title }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
         <div class="header-right">
-          <el-popover width="380" trigger="focus" :visible="searchVisible">
+          <el-popover v-if="!isMobile" width="380" trigger="focus" :visible="searchVisible">
             <template #reference>
               <el-input
                 v-model="searchKw"
@@ -173,6 +214,13 @@ const route = useRoute()
 const router = useRouter()
 
 const collapse = ref(false)
+const isMobile = ref(false)
+const drawerOpen = ref(false)
+
+function toggleSidebar() {
+  if (isMobile.value) drawerOpen.value = !drawerOpen.value
+  else collapse.value = !collapse.value
+}
 
 const role = computed(() => auth.user?.role ?? '')
 const visible = (item: MenuItem) => !item.roles || item.roles.includes(role.value)
@@ -241,9 +289,12 @@ const visibleMenu = computed(() =>
 
 const activeMenu = computed(() => (route.meta.menu as string) ?? 'dashboard')
 
-// collapse automatically on narrow windows
+// collapse automatically on narrow windows; below 768 the sidebar is a drawer
 function syncCollapse() {
-  collapse.value = window.innerWidth < 1024
+  const w = window.innerWidth
+  isMobile.value = w < 768
+  if (w < 768) drawerOpen.value = false
+  collapse.value = w < 1024
 }
 onMounted(() => {
   syncCollapse()
@@ -324,6 +375,11 @@ onMounted(loadBell)
   background-color: #1f2d3d;
   overflow-x: hidden;
   transition: width 0.2s;
+}
+
+.drawer-body {
+  width: 220px;
+  min-height: 100%;
 }
 
 .logo {

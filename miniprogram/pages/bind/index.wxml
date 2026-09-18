@@ -1,0 +1,11 @@
+<view class="card">
+  <view class="card-title">绑定 LabFlow 账号</view>
+  <view class="muted" style="margin-bottom: 16rpx">
+    首次使用需要绑定已有账号：请向 PI 索取一次性绑定码
+  </view>
+  <input class="input" placeholder="LabFlow 用户名" value="{{username}}" data-field="username" bindinput="onInput" />
+  <input class="input" placeholder="密码" password value="{{password}}" data-field="password" bindinput="onInput" />
+  <input class="input" placeholder="一次性绑定码" value="{{bindingCode}}" data-field="bindingCode" bindinput="onInput" />
+  <button class="btn block" loading="{{loading}}" bindtap="onBind">绑定并登录</button>
+  <view wx:if="{{error}}" class="error">{{error}}</view>
+</view>

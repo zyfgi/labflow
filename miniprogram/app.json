@@ -1,0 +1,35 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/members/index",
+    "pages/research/index",
+    "pages/scan/index",
+    "pages/ai/index",
+    "pages/me/index",
+    "pages/login/index",
+    "pages/bind/index",
+    "pages/notifications/index",
+    "pages/equipment/index"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#1f2d3d",
+    "navigationBarTitleText": "LabFlow",
+    "navigationBarTextStyle": "white"
+  },
+  "tabBar": {
+    "color": "#909399",
+    "selectedColor": "#409eff",
+    "backgroundColor": "#ffffff",
+    "list": [
+      { "pagePath": "pages/home/index", "text": "首页", "iconPath": "assets/tab-home.png", "selectedIconPath": "assets/tab-home-active.png" },
+      { "pagePath": "pages/members/index", "text": "成员", "iconPath": "assets/tab-members.png", "selectedIconPath": "assets/tab-members-active.png" },
+      { "pagePath": "pages/research/index", "text": "科研", "iconPath": "assets/tab-research.png", "selectedIconPath": "assets/tab-research-active.png" },
+      { "pagePath": "pages/scan/index", "text": "扫码", "iconPath": "assets/tab-scan.png", "selectedIconPath": "assets/tab-scan-active.png" },
+      { "pagePath": "pages/me/index", "text": "我的", "iconPath": "assets/tab-me.png", "selectedIconPath": "assets/tab-me-active.png" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

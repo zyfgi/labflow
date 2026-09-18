@@ -1,0 +1,17 @@
+<view class="card" wx:if="{{eq}}">
+  <view class="row">
+    <view style="font-weight:600;flex:1;font-size:32rpx">{{eq.name}}</view>
+    <view class="tag {{eq.status === 'available' ? 'success' : eq.status === 'fault' ? 'danger' : 'warning'}}">
+      {{eq.status}}
+    </view>
+  </view>
+  <view class="muted">{{eq.asset_no}} · {{eq.category}} · {{eq.location || '位置未登记'}}</view>
+  <view class="muted" wx:if="{{eq.manager_name}}">设备管理员：{{eq.manager_name}}</view>
+</view>
+
+<view class="card" wx:if="{{eq}}">
+  <button class="btn block" bindtap="book">预约（1 小时后开始）</button>
+  <button class="btn block" style="margin-top:16rpx" bindtap="borrow">借出（24 小时）</button>
+  <button class="btn block" style="background:#f56c6c;margin-top:16rpx" bindtap="reportFault">上报故障</button>
+</view>
+<view wx:if="{{loading}}" class="empty">加载中…</view>

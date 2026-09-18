@@ -1,11 +1,22 @@
 # AGENTS.md — LabFlow Agent 维护手册
 
-> 后续 AI Agent / 开发者先读这一份（约 200 行）。历史执行记录在 `docs/archive/`。
+> 后续 AI Agent / 开发者先读这一份（约 200 行）。
 
 ## 项目是什么
 
 高校科研实验室管理系统（5–50 人课题组）：成员 → 周报 → 项目/任务 → 实验记录 → 设备 → 看板，
 外加一个**只读** AI 助手（本地权限检索 + 外部 OpenAI-compatible 模型）。
+
+**LabFlow does not use approval-heavy workflows.**
+
+Most actions: execute immediately, notify relevant users, write audit logs.
+
+中文：系统采用轻流程协同——默认直接执行，相关人员自动收到通知，所有关键操作留痕。
+周报=草稿→发布（发布后仍可改）；预约=无冲突即 reserved（无 approve/reject 端点）；
+借用=可用即借出（延期=PATCH expected_return_time）；故障上报立即生效；任务/成员变更立即生效。
+通知中心只有已读/未读；Dashboard 的"需关注"仅提示。高风险动作（删除/解绑/重生成 QR/安全配置）
+只做本人确认。旧审批字段 approved_by/approved_at/reviewer_id/reviewed_at 为 legacy unused，
+保留 nullable 但业务不再使用；不得新增任何审批节点。
 
 技术栈：Vue 3 + TS + Vite + Element Plus + Pinia｜FastAPI + SQLAlchemy 2 + Alembic + PostgreSQL 16。
 
@@ -48,7 +59,8 @@ backend/app/
 ├── storage/         StorageService（文件上传唯一入口）
 └── seed.py seed_data.py cli.py due_checker.py
 frontend/src/        api/（axios 模块）stores/ views/ layouts/ router/ utils/ types/
-docs/                架构/数据库/API/部署/备份/AI/检索/安全 说明 + archive/（历史报告）
+miniprogram/         微信小程序（原生）：首页/成员/科研/扫码/AI/我的 + 绑定流程
+docs/                架构/数据库/API/部署/备份/AI/检索/安全/内网HTTPS 说明
 ```
 
 ## 硬性规则（违反 = bug）
@@ -71,8 +83,14 @@ docs/                架构/数据库/API/部署/备份/AI/检索/安全 说明 
    实验锁定、预约冲突、RBAC（见"关键测试"）。
 9. 响应统一 `{data, message}` + 分页 `{items,total,page,page_size}`；错误 `{"detail": ...}`；
    AI 错误为 `{code, message}`（code 可外露，内部细节不外露）。
-10. 状态色语义统一（success=完成/可用，warning=待审/受阻，danger=逾期/故障，info=草稿/归档），
-    常量在 `frontend/src/utils/constants.ts`。
+10. 状态色语义统一（success=正常完成，warning=需关注/受阻，danger=真异常（故障/逾期），
+    info=新动态/草稿/归档），常量在 `frontend/src/utils/constants.ts`。
+11. **不重新引入审批流**：不加 approve/reject/review/return 端点或按钮；协调靠通知
+    （`app/services/notifications.py` 的 `notify()`，事件清单见 NOTIFICATION_EVENTS）+ audit_logs。
+    周报可见性：published 全实验室可读（read collaboration），draft 仅本人；评论走
+    weekly_report_comments。学生能否建项目由运行时设置 STUDENT_CAN_CREATE_PROJECT 控制。
+12. 通知只发给真正相关人（assignee/管理员/预约人等），禁止全实验室广播；
+    NOTIFICATION_ENABLED=false 时 notify() 返回 0，业务动作本身不受影响。
 
 ## 权限模型速查
 
@@ -81,7 +99,7 @@ docs/                架构/数据库/API/部署/备份/AI/检索/安全 说明 
   **EQUIPMENT_ADMIN 与 GUEST 不因 lab 可见性读到任何项目/任务/实验/周报/成员档案。**
 - 项目管理 = PI ∪ owner ∪ owner/manager 成员。实验创建 = PI ∪ owner ∪ 在册成员（仅 lab 可见不行）。
 - 实验锁定后对普通成员冻结（编辑/传/删附件均 403），PI 可解锁并写审计。
-- 周报：PI/教师全量；学生仅本人（含 AI 检索）。AI 会话：严格本人，PI 也不例外。
+- 周报：PI/教师全量；学生 = 本人全部 + 他人已发布（含 AI 检索）。AI 会话：严格本人，PI 也不例外。
 
 ## AI 数据流
 
@@ -112,7 +130,9 @@ test_ai_permissions.py   SECRET_PROJECT_B_TOKEN_9F83A：search/retrieve/LLM payl
 test_ai_injection.py     注入指令只能作为 JSON source 证据；单次模型调用
 test_ai_chat.py          会话所有权（PI 也不可读他人）/ 错误脱敏 / 限流 / 空结果不调模型
 test_query_counts.py     列表与 Dashboard 的 SQL 数量不随数据量增长
-test_equipment.py        预约冲突（重叠 409、相邻允许）/ 借还 / 维修
+test_equipment.py        预约立即 reserved（重叠 409、相邻允许）/ 借还延期 / 故障即时生效 / QR
+test_weekly_reports.py   发布即生效+通知+审计 / 已发布可继续改 / 评论 / 旧审核端点 404
+test_light_process.py    通知扇出 / 学生建项目开关 / 通知总开关 / 微信绑定（一次性码）
 test_auth.py test_permissions.py test_projects.py test_weekly_reports.py test_experiments.py
 ```
 

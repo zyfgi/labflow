@@ -11,10 +11,11 @@ from app.models.equipment import (
 from app.models.experiment import Experiment, ExperimentAttachment
 from app.models.learning import LearningPlan, MemberSkill, Skill
 from app.models.project import Milestone, Project, ProjectMember, Task, TaskComment
-from app.models.report import WeeklyReport
+from app.models.report import WeeklyReport, WeeklyReportComment
 from app.models.settings import SystemSettings
 from app.models.system import AuditLog, Notification
 from app.models.user import MemberProfile, User
+from app.models.wechat import WeChatBindingCode
 
 __all__ = [
     "AIConversation",
@@ -40,5 +41,7 @@ __all__ = [
     "Task",
     "TaskComment",
     "User",
+    "WeChatBindingCode",
     "WeeklyReport",
+    "WeeklyReportComment",
 ]

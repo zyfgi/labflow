@@ -28,18 +28,9 @@
           <el-tag size="small" :type="BOOKING_STATUS_TAGS[row.status]">{{ BOOKING_STATUS_LABELS[row.status] }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right">
+      <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
-          <template v-if="canApprove && row.status === 'pending'">
-            <el-button link type="success" size="small" @click="act(row, 'approve')">批准</el-button>
-            <el-button link type="danger" size="small" @click="act(row, 'reject')">拒绝</el-button>
-          </template>
-          <el-button
-            v-if="row.status === 'pending' || row.status === 'approved'"
-            link
-            size="small"
-            @click="act(row, 'cancel')"
-          >
+          <el-button v-if="row.status === 'reserved'" link size="small" @click="cancel(row)">
             取消
           </el-button>
         </template>
@@ -62,15 +53,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { bookingAction, listBookings, type EquipmentBooking } from '@/api/equipment'
+import { onMounted, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { cancelBooking, listBookings, type EquipmentBooking } from '@/api/equipment'
 import { BOOKING_STATUS_LABELS, BOOKING_STATUS_TAGS } from '@/utils/constants'
 import ExportButton from '@/components/ExportButton.vue'
 import { formatDateTime } from '@/utils/datetime'
-import { useAuthStore } from '@/stores/auth'
 
-const auth = useAuthStore()
-const canApprove = computed(() => auth.isPI || auth.isEquipmentAdmin)
 const loading = ref(false)
 const items = ref<EquipmentBooking[]>([])
 const total = ref(0)
@@ -94,8 +83,9 @@ async function load(page?: number) {
   }
 }
 
-async function act(row: EquipmentBooking, action: 'approve' | 'reject' | 'cancel') {
-  await bookingAction(row.id, action)
+async function cancel(row: EquipmentBooking) {
+  await cancelBooking(row.id)
+  ElMessage.success('预约已取消，相关人员已收到通知')
   await load()
 }
 

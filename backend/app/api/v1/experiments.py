@@ -17,10 +17,24 @@ from app.permissions.projects import (
     visible_project_ids_subquery,
 )
 from app.schemas.experiment import ExperimentCreate, ExperimentOut, ExperimentUpdate
+from app.services.notifications import notify
 from app.storage import storage_service
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 attachments_router = APIRouter(prefix="/experiment-attachments", tags=["experiments"])
+
+
+def _project_member_ids(db: Session, project_id: int) -> list[int]:
+    from app.models.project import ProjectMember
+
+    return list(
+        db.scalars(
+            select(ProjectMember.user_id).where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.left_at.is_(None),
+            )
+        )
+    )
 
 
 def _get_experiment(db: Session, experiment_id: int) -> Experiment:
@@ -172,6 +186,16 @@ def create_experiment(
     write_audit_log(
         db, user, "create_experiment", "experiment", exp.id, {"no": exp.experiment_no}
     )
+    notify(
+        db,
+        _project_member_ids(db, project.id),
+        "experiment_created",
+        "新实验记录",
+        f"{user.name} 创建实验 {exp.experiment_no}「{exp.title}」",
+        "experiment",
+        exp.id,
+        exclude_user_id=user.id,
+    )
     db.commit()
     return ok(_out(exp), message="实验记录已创建")
 
@@ -228,6 +252,16 @@ def update_experiment(
         exp.id,
         {"fields": list(data.keys())},
     )
+    notify(
+        db,
+        _project_member_ids(db, exp.project_id),
+        "experiment_updated",
+        "实验记录更新",
+        f"{user.name} 更新了实验 {exp.experiment_no}",
+        "experiment",
+        exp.id,
+        exclude_user_id=user.id,
+    )
     db.commit()
     return ok(_out(exp), message="实验已更新")
 
@@ -266,6 +300,16 @@ def lock_experiment(
     write_audit_log(
         db, user, "lock_experiment", "experiment", exp.id, {"no": exp.experiment_no}
     )
+    notify(
+        db,
+        [exp.owner_id],
+        "experiment_locked",
+        "实验已锁定",
+        f"实验 {exp.experiment_no} 已由 {user.name} 锁定，如需修改请先解锁",
+        "experiment",
+        exp.id,
+        exclude_user_id=user.id,
+    )
     db.commit()
     return ok(_out(exp), message="实验已锁定")
 
@@ -286,6 +330,16 @@ def unlock_experiment(
     exp.locked_by = None
     write_audit_log(
         db, user, "unlock_experiment", "experiment", exp.id, {"no": exp.experiment_no}
+    )
+    notify(
+        db,
+        [exp.owner_id],
+        "experiment_unlocked",
+        "实验已解锁",
+        f"实验 {exp.experiment_no} 已由 {user.name} 解锁，可以继续修改",
+        "experiment",
+        exp.id,
+        exclude_user_id=user.id,
     )
     db.commit()
     return ok(_out(exp), message="实验已解锁")

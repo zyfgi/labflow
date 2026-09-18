@@ -112,8 +112,6 @@ class BookingOut(BaseModel):
     end_time: datetime
     purpose: str | None
     status: str
-    approved_by: int | None
-    approved_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -122,6 +120,13 @@ class BorrowCreate(StrictSchema):
     equipment_id: int
     expected_return_time: datetime
     purpose: str | None = Field(default=None, max_length=2000)
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class BorrowUpdate(StrictSchema):
+    """Extending a borrow: push the expected return time further out."""
+
+    expected_return_time: datetime
     note: str | None = Field(default=None, max_length=2000)
 
 
@@ -137,7 +142,6 @@ class BorrowOut(BaseModel):
     purpose: str | None
     status: str
     note: str | None
-    approved_by: int | None
     created_at: datetime
     updated_at: datetime
 
@@ -195,6 +199,7 @@ __all__ = [
     "BookingUpdate",
     "BorrowCreate",
     "BorrowOut",
+    "BorrowUpdate",
     "EquipmentCreate",
     "EquipmentOut",
     "EquipmentUpdate",

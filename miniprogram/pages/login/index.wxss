@@ -1,0 +1,31 @@
+.login {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 160rpx 60rpx 0;
+}
+
+.logo {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 24rpx;
+  background: #409eff;
+  color: #fff;
+  font-size: 52rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.title {
+  font-size: 36rpx;
+  font-weight: 700;
+  margin-top: 30rpx;
+}
+
+.error {
+  color: #f56c6c;
+  font-size: 26rpx;
+  margin-top: 24rpx;
+}

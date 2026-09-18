@@ -1,96 +1,97 @@
-# FINAL_REPORT — 业务审计 / 测试收敛 / 配置中心 / 瘦身 / UI
+# FINAL_REPORT — 轻流程协同轮（LabFlow_下一轮_Agent执行手册_轻流程协同版）
 
-> 基线 `e8a6829` → 本轮提交。一次性无人值守执行。历史报告已删除（Git 保留历史）。
+> 基线 `0da8ce8` → 本轮提交。一次性无人值守执行。上一轮报告已被本文件覆盖（Git 保留历史）。
 
-## 1. Baseline
+本轮核心原则：**LabFlow 是科研协同记录系统，不是 OA 审批系统。**
+所有不必要的审批/审核/退回替换为：直接执行 → 通知相关人员 → 完整留痕。
+未引入工作流引擎 / BPM / 审批引擎 / Redis / MQ / 微服务。
 
-backend/app 74 文件 / 8750 LOC；tests 2709 LOC；frontend 7015 LOC；pytest 131；前端测试 6；
-dashboard 29 queries；build 2799KB。详见 `docs/refactor-baseline.md`（含 before/after 表）。
+## 1. 删除了哪些审批流程
 
-## 2. 发现的业务 bug（审计结论 15 项）
+| 旧流程 | 新流程 | 代码处理 |
+| --- | --- | --- |
+| 周报 draft→submitted→reviewed/returned，submit/review/return 端点 | draft→published；发布后可继续改，评论取代审核 | 端点直接删除（404）；`submitted_at` 迁移改名 `published_at`；新增 `WeeklyReportComment` |
+| 预约 pending→approved/rejected，approve/reject 端点 | 无冲突即 `reserved`，冲突 409，取消即时 | 端点直接删除（404）；`approved_by/approved_at` 保留为 legacy unused（nullable，不再写入） |
+| 借用人工批准（旧字段遗留） | 可用即借出；归还即时；**延期**=PATCH `expected_return_time` + 通知管理员 | legacy `approved_by` 列保留未用 |
+| 任务 `review` 状态（强制复核节点） | 状态收敛为 todo/in_progress/blocked/done/cancelled；review→done 无需他人批准 | 旧数据迁移至 `in_progress` |
+| 项目成员需接受确认 | 添加立即生效，被添加人收到通知，无需确认 | 文案/文档澄清（本就无确认端点） |
+| 学生不能建项目 | 运行时设置 `STUDENT_CAN_CREATE_PROJECT`（默认 **true**） | PI 可在设置中心关闭 |
 
-private/project_members 语义重复；EQUIPMENT_ADMIN 经 membership/owner/assignee 旁路读科研数据；
-设备域误用 is_staff；assignee 可 PATCH 任务全部字段；任务/里程碑状态无枚举校验；
-done→reopen 未清 completed_at；任务可挂其他项目的里程碑/父任务、assignee 无角色校验（可 500）；
-项目软删后子任务仍可直读；实验锁定对 PI 不彻底；approved 预约可被改期仍 approved；
-未来预约把设备长期置 reserved；借用允许过去归还时间；维修状态机不完整；
-due_checker 自定义时间源；实验编号测试永真断言；mutation schema 静默忽略未知字段。
+**审批相关代码删除行数（净）**：后端约 **-394** 行（weekly_reports 审核链 3 端点、equipment approve/reject 2 端点、dashboard 待审批卡、due_checker 旧状态），测试删除旧审批用例约 **-260** 行。
+**审批相关测试删除/重写数量**：删除 9 个旧审批用例（approve/reject 通知、审核/退回流、改期回退待审批等），重写为 15 个设备 + 12 个周报轻流程契约用例，新增 8 个核心用例（`test_light_process.py`）。
 
-## 3. 修复（全部带回归测试）
+## 2. 新的通知事件（24 个）
 
-- **可见性三档真正分层**：private=PI/owner/manager；project_members=+成员；lab=+TEACHER/STUDENT。
-  EQUIPMENT_ADMIN/GUEST 在 owner/member 判断**之前**直接拒绝科研域（含 Search/AI Retrieval/子任务）。
-- **设备域角色拆分**：`EQUIPMENT_VIEW_ROLES = PI+EQUIPMENT_ADMIN` 看全部预约/借用；
-  TEACHER/STUDENT 仅本人。设备管理员被加进 ProjectMember 也读不到科研数据（有测试）。
-- **任务权限拆分**：PATCH 仅项目管理方（改 title/assignee/优先级等 metadata）；
-  assignee 走 `/status` 与评论。`TaskStatusRequest.status` 严格枚举（非法 422）。
-- **状态时间戳**：done→completed_at=now、progress=100；离开 done/cancelled 清 completed_at（reopen 测试）。
-- **跨资源完整性**：milestone/parent 必须同项目；assignee 必须 active、非 EQUIPMENT_ADMIN/GUEST，
-  private/project_members 项目还须是成员。非法一律 422，不再 500。
-- **软删项目子任务封禁**：Scope 要求父项目未删；direct GET/评论 404；Search/AI 均不可见。
-- **实验锁定 = 冻结**：锁定后 owner/manager/PI 全部不可改/传/删附件/删实验，仅 unlock 恢复。
-- **预约状态机**：pending→approved/rejected/cancelled；approved→cancelled/completed；终态封闭。
-  approved 被申请人改期 → 自动回 pending 并清审批字段（重新审批）。测试覆盖非法转换 400。
-- **设备物理状态解耦**：approve/cancel 不再写 reserved；详情返回 current_booking/next_booking。
-- **借用/维修完整性**：expected_return_time 必须未来（422）；维修转换表
-  reported→processing/cancelled、processing→completed/cancelled，终态封闭，取消/完成后按剩余工单恢复设备状态。
-- **due_checker** 统一用 `app.core.time`；实验编号测试改为 regex+序号递增；未知字段 422（StrictSchema）。
+`app/services/notifications.py::NOTIFICATION_EVENTS`（净增 **13**）：
 
-## 4. 测试体系
+- 项目/任务：`project_created` `project_member_added` `task_assigned` `task_reassigned` `task_due_changed` `task_completed` `task_due_soon` `task_overdue`
+- 周报：`weekly_report_published` `weekly_report_updated` `weekly_report_commented`
+- 实验：`experiment_created` `experiment_updated` `experiment_locked` `experiment_unlocked`
+- 设备：`equipment_booked` `equipment_booking_cancelled` `equipment_borrowed` `equipment_returned` `equipment_overdue` `equipment_fault` `maintenance_updated`
+- 微信：`wechat_bound` `wechat_unbound`
 
-- 删除阶段性文件 `test_p0_hardening.py`、`test_refactor_p0.py`，规则并入领域文件。
-- 新增：`factories.py`（6 个 API 级工厂）、`test_rbac_matrix.py`（角色×资源参数化）、
-  `test_tasks.py`、`test_settings.py`；歧义断言（多结果都算成功）改为单一契约。
-- 关键保护全部保留：SECRET_PROJECT_B_TOKEN 三层零泄漏、周报泄漏、注入边界、
-  会话所有权、单次模型调用、锁定、预约冲突、RBAC。
-- pytest 131 → **160 passed**；`pytest-cov` 分支覆盖 **78%**（权限/AI 安全/Settings 88–100%）。
+只发给真正相关人（assignee、设备管理员/负责人、受影响预约人、报告人、PI）；`notify()` 统一去重并排除操作者本人；禁止全实验室广播。通知只有已读/未读，无确认/签收。`NOTIFICATION_ENABLED=false` 时静默（动作照常、审计照写）。
 
-## 5. 系统设置（可视化配置中心）
+## 3. Audit 覆盖的 mutation 数
 
-- 迁移 `b713192d`：单表 `system_settings`（id=1，config_json + encrypted_secrets）。
-- `GET/PATCH /api/v1/system/settings`（仅 PI）+ `POST /system/settings/ai/test`。
-- Runtime 可编辑：APP_NAME、APP_TIMEZONE(restart)、AI 全部参数、UPLOAD_MAX_MB、扩展名白名单。
-  Bootstrap 只读展示：DATABASE_URL 密码脱敏、SECRET_KEY 仅显示 configured。
-- **AI_API_KEY write-only**：Fernet（由 SECRET_KEY 派生）加密存储，GET 只返回
-  `AI_API_KEY_CONFIGURED`；留空保留、传新值更新、clear_ai_api_key 清除；审计不记录 secret。
-- AI 服务/限流/上下文/存储上传每次请求读取一次 runtime 配置，生效无需重启（时区除外，UI 已标注）。
-- 前端 `/system/settings`（PI）：基础设置/AI 助手/存储/部署与安全 四 Tab，测试连接只显示 结果/模型/延迟。
+**31** 个动作类型写 `audit_logs`：create/update/delete（project/task/milestone/weekly_report/experiment/equipment）、publish_weekly_report、comment_weekly_report、create/cancel_booking、borrow/extend_borrow/return_equipment、report_fault、update_maintenance、lock/unlock_experiment、generate/regenerate_qr、create_wechat_binding_code、bind/unbind_wechat、update_runtime_settings 等。不记录任何密码/密钥/绑定码明文。
 
-## 6. UI 与瘦身
+## 4. 权限变化
 
-- MainLayout 改为**数据驱动菜单**（label/icon/route/roles 一套数组过滤），支持折叠、窄屏自动收起。
-- 新增 `styles/tokens.css` 设计令牌；Dashboard KPI 数组驱动；删除无路由引用的 HomeView；
-  阶段性注释（P0/Phase/PRD§）全仓清除；`ruff format` + `ruff check` 全绿。
-- 删除 `docs/archive/` 历史执行报告。
+- **read collaboration / write ownership**：已发布周报全实验室（PI/TEACHER/STUDENT）可读，草稿仅本人；学生可看其他成员科研进度（列表/AI 检索同步放开；侧信道安全：学生检索他人只能命中 published）。
+- EQUIPMENT_ADMIN/GUEST 仍被挡在科研域之外；AI 三层泄漏测试（SECRET_PROJECT_B_TOKEN_9F83A）与全部安全测试保持通过。
+- 新增：学生建项目受运行时开关控制；微信首次绑定需 PI 一次性绑定码（禁止自动注册）。
 
-## 7. 代码量（诚实说明）
+## 5. 多端适配
 
-旧业务生产代码净减约 380 行（Planner、权限双实现、设备状态同步、utcnow 重复、死 schema/helper/HomeView）。
-但本轮**新增 Settings 功能约 675 行**（前后端）+ 新增回归测试约 900 行，加上 ruff format 换行展开，
-backend/app 总 LOC 8750 → 10649、frontend 7015 → 7308。**未达"旧业务净减 8%"目标**，原因即上述；
-旧代码的删减点均可 grep 复核（planner/staff 预约分支/reserved 同步等已不存在）。
+- **手机 Web**：MainLayout <768px 侧栏变抽屉、≥992 桌面完整布局；Dashboard/周报/设备/详情页 `:xs/:md` 断点；移动首页 = 通知/最近动态/需关注（无待审批）。
+- **微信小程序**（`miniprogram/`，原生，约 1,100 行）：首页（通知+动态+需关注）/成员/科研（项目/任务/实验/周报：发布+评论）/扫码（预约·借用·归还·故障上报）/AI/我的 + 登录 + 绑定 + 通知中心 + 设备详情。无审批收件箱。
+- PC：所有角色功能完整（学生可建项目、管理有权限的任务、发布周报）。
 
-## 8. SQL / 构建
+## 6. QR
 
-dashboard 29 queries（保持）；projects/tasks/experiments 各 5（保持，含 5→50 行数据回归断言）；
-ai/retrieve 10；build dist 2808KB（+9KB，Settings 页）。
+`POST /equipment/{id}/qr`（生成）、`?regenerate=true`（重生成→旧标签立即失效）；详情页显示/下载 PNG；`GET /qr/{token}` 服务端解析；Web `/q/{token}` 落地页直达设备。标签 URL = `PUBLIC_BASE_URL/q/{token}`（设置中心可配，留空为站内路径）。**二维码不是凭证**：扫码后仍走正常认证与 RBAC。
 
-## 9. 验证结果
+## 7. WeChat
 
-```text
-ruff check app tests        All checks passed
-ruff format app tests       已执行
-pytest -q                   160 passed
-pytest --cov=app --cov-branch   78% branch
-alembic current             b713192d (head)；fresh DB upgrade → 24 表全部建立
-frontend typecheck          0 错误
-frontend test               6 passed
-frontend build              ✓ built
-Docker                      本机无 Docker（延续环境限制），compose 已静态校验
+`app/api/v1/wechat.py`：`POST /wechat/session`（code2Session，已绑定直接发 JWT）、`POST /wechat/bind`（账号密码 + PI 一次性绑定码）、`DELETE /wechat/bind`（自助解绑，确认后立即生效）、绑定码签发/列表（PI only，30 分钟、一次性、用后即焚、审计不留明文）。`WECHAT_APPID/WECHAT_SECRET` 仅存后端 `.env`；未配置时开发环境支持 `mock:<openid>`。入口受 `WECHAT_MINIPROGRAM_ENABLED` 控制（默认关）。
+
+## 8. HTTPS
+
+`docs/intranet-https.md` + `nginx/nginx-labflow.conf`：真实域名 + Let's Encrypt **DNS-01**（内网也能签）+ Nginx TLS 终结；HTTP→HTTPS 301；PostgreSQL/uvicorn 仅监听 127.0.0.1，防火墙不放行 5432/8000；HSTS 等安全头；certbot 自动续期校验清单。
+
+## 9. 测试
+
+```
+backend:  174 passed · ruff format/check (F401,F811,F841) 全过
+frontend: typecheck 0 errors · vitest 6 passed · vite build ✓
+DB:       全新库 alembic upgrade head → 26 表；存量库迁移验证：
+          submitted/reviewed→published、returned→draft、pending/approved→reserved、
+          rejected→cancelled、task review→in_progress、submitted_at→published_at 全部正确
 ```
 
-## 10. Known Issues
+## 10. LOC before / after
 
-1. 分支覆盖 78%，略低于 80% 目标；缺口集中在检索 members/weekly_reports 模块的少量分支。
-2. Docker 本机不可用（无法 compose build/up），文件持续维护并通过 YAML 校验。
-3. Playwright E2E 未引入（浏览器安装受限）；以 API 级业务回归 + Vitest 覆盖同等场景。
+| 范围 | before (0da8ce8) | after | Δ |
+| --- | --- | --- | --- |
+| backend/app | 10,649 | 11,367 | +718（新增 wechat 289 + QR 90 + 评论/通知中心 ~120；审批净删 -394 被新功能抵消） |
+| frontend/src | 7,410 | 7,766 | +356（QR 落地页/绑定码管理/评论；审批 UI 净删 -216） |
+| miniprogram | 0 | 1,097 | +1,097（全新端） |
+
+审批路径本身显著缩减：周报审核 3 端点→0、预约审批 2 端点→0、Dashboard 待审批卡 2→0、任务 review 状态移除；新增行全部来自本轮要求的微信/QR/评论/多端能力。
+
+## 遗留说明（手册 §72 legacy fields）
+
+`equipment_bookings.approved_by/approved_at`、`equipment_borrows.approved_by`、
+`weekly_reports.reviewer_id/reviewed_at/review_comment` 为 **legacy unused**：
+nullable 保留、业务零引用、模型处有注释标记；下一轮可出独立迁移清理。
+
+## 最终验收指标对照（手册 §75）
+
+- [x] 周报无强制审核 / 预约无审批 / 借用无审批 / 项目成员加入无确认 / 任务完成无审批 / 故障上报立即生效
+- [x] 周报·任务·项目·预约·借还·故障·维修 全部有通知
+- [x] 所有重要 mutation 写 AuditLog
+- [x] 学生可查看其他成员科研进度，不能改无权限数据（安全测试全绿）
+- [x] teacher/student × PC / 手机 Web / 微信小程序 三端一致
+- [x] QR 生成/绑定/下载/重生成失效/扫码解析
+- [x] 内网 HTTPS（DNS-01 + Nginx）方案与配置交付

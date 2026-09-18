@@ -1,0 +1,64 @@
+page {
+  background: #f5f7fa;
+  font-size: 28rpx;
+  color: #303133;
+}
+
+.card {
+  background: #fff;
+  border-radius: 12rpx;
+  margin: 20rpx;
+  padding: 24rpx;
+}
+
+.card-title {
+  font-weight: 600;
+  margin-bottom: 16rpx;
+}
+
+.muted {
+  color: #909399;
+  font-size: 24rpx;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.tag {
+  font-size: 20rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 8rpx;
+  background: #ecf5ff;
+  color: #409eff;
+}
+
+.tag.success { background: #f0f9eb; color: #67c23a; }
+.tag.warning { background: #fdf6ec; color: #e6a23c; }
+.tag.danger { background: #fef0f0; color: #f56c6c; }
+.tag.info { background: #f4f4f5; color: #909399; }
+
+.btn {
+  margin-top: 24rpx;
+  background: #409eff;
+  color: #fff;
+  border-radius: 10rpx;
+}
+
+.btn.block {
+  width: 100%;
+}
+
+.empty {
+  text-align: center;
+  color: #909399;
+  padding: 60rpx 0;
+}

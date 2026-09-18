@@ -274,7 +274,7 @@ def test_search_never_leaks_private_project(client, db, pi, student, student_b):
     """private: regular members lose read access too; search must follow."""
     from tests.factories import add_project_member, create_project
 
-    private_id = create_project(
+    create_project(
         client, pi, name="SCOPE 秘密项目", visibility="private", code="SCOPE-SECRET"
     )
     member_project = create_project(

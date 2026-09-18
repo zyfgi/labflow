@@ -44,31 +44,31 @@
         </el-col>
         <el-col :md="10">
           <el-card shadow="never">
-            <template #header>待处理事项</template>
+            <template #header>需关注事项</template>
             <div class="todo-grid">
-              <div class="todo-item" @click="$router.push('/weekly-reports?status=submitted')">
-                <span class="todo-num" :class="{ 'todo-hot': pi.todo.pending_reports > 0 }">{{ pi.todo.pending_reports }}</span>
-                <span>待审核周报</span>
-              </div>
-              <div class="todo-item" @click="$router.push('/equipment-bookings?status=pending')">
-                <span class="todo-num" :class="{ 'todo-hot': pi.todo.pending_bookings > 0 }">{{ pi.todo.pending_bookings }}</span>
-                <span>待审批预约</span>
-              </div>
-              <div class="todo-item" @click="$router.push('/tasks')">
-                <span class="todo-num" :class="{ 'todo-hot': pi.todo.overdue_tasks.length > 0 }">{{ pi.todo.overdue_tasks.length }}</span>
+              <div class="todo-item" @click="$router.push('/tasks?overdue=1')">
+                <span class="todo-num" :class="{ 'todo-hot': pi.attention.overdue_tasks.length > 0 }">{{ pi.attention.overdue_tasks.length }}</span>
                 <span>逾期任务</span>
               </div>
+              <div class="todo-item" @click="$router.push('/equipment-borrows')">
+                <span class="todo-num" :class="{ 'todo-hot': pi.attention.overdue_borrows.length > 0 }">{{ pi.attention.overdue_borrows.length }}</span>
+                <span>超期借用</span>
+              </div>
               <div class="todo-item" @click="$router.push('/equipment-maintenance')">
-                <span class="todo-num" :class="{ 'todo-hot': pi.todo.fault_equipment.length > 0 }">{{ pi.todo.fault_equipment.length }}</span>
+                <span class="todo-num" :class="{ 'todo-hot': pi.attention.fault_equipment.length > 0 }">{{ pi.attention.fault_equipment.length }}</span>
                 <span>故障设备</span>
+              </div>
+              <div class="todo-item" @click="$router.push('/projects')">
+                <span class="todo-num">{{ pi.attention.stale_projects.length }}</span>
+                <span>长期未更新项目</span>
               </div>
             </div>
             <el-divider content-position="left">即将到期里程碑（14 天内）</el-divider>
-            <div v-for="m in pi.todo.due_milestones" :key="m.id" class="milestone-row">
+            <div v-for="m in pi.attention.due_milestones" :key="m.id" class="milestone-row">
               <span>{{ m.title }} <span style="color:#909399">· {{ m.project_name }}</span></span>
               <el-tag size="small" type="warning">{{ m.due_date }}</el-tag>
             </div>
-            <el-empty v-if="!pi.todo.due_milestones.length" description="暂无到期里程碑" :image-size="50" />
+            <el-empty v-if="!pi.attention.due_milestones.length" description="暂无到期里程碑" :image-size="50" />
           </el-card>
         </el-col>
       </el-row>
@@ -101,7 +101,7 @@
               <el-table-column label="本周周报" width="90">
                 <template #default="{ row }">
                   <el-tag size="small" :type="row.this_week_report === 'none' ? 'info' : REPORT_STATUS_TAGS[row.this_week_report]">
-                    {{ row.this_week_report === 'none' ? '未提交' : REPORT_STATUS_LABELS[row.this_week_report] }}
+                    {{ row.this_week_report === 'none' ? '未发布' : REPORT_STATUS_LABELS[row.this_week_report] }}
                   </el-tag>
                 </template>
               </el-table-column>
@@ -129,6 +129,15 @@
 
     <!-- Student dashboard -->
     <template v-else-if="stu">
+      <el-alert
+        v-for="b in stu.attention.overdue_borrows"
+        :key="b.id"
+        type="warning"
+        :closable="false"
+        style="margin-bottom: 12px"
+      >
+        设备「{{ b.equipment_name }}」借用已超期（应还 {{ formatDateTime(b.expected_return_time) }}），请尽快归还或延期
+      </el-alert>
       <el-row :gutter="12" class="kpi-row">
         <el-col :xs="12" :sm="8" :md="4" v-for="k in stuKpis" :key="k.label">
           <el-card shadow="never" class="kpi-card">
@@ -248,7 +257,7 @@ const stuKpis = computed(() =>
     ? [
         { label: '进行中任务', value: stu.value.kpis.tasks_in_progress },
         { label: '逾期任务', value: stu.value.kpis.tasks_overdue, danger: stu.value.kpis.tasks_overdue > 0 },
-        { label: '本周周报', value: stu.value.kpis.this_week_report === 'none' ? '未提交' : REPORT_STATUS_LABELS[stu.value.kpis.this_week_report] },
+        { label: '本周周报', value: stu.value.kpis.this_week_report === 'none' ? '未发布' : REPORT_STATUS_LABELS[stu.value.kpis.this_week_report] },
         { label: '我的实验', value: stu.value.kpis.experiment_count },
         { label: '未读通知', value: stu.value.kpis.unread_notifications, danger: stu.value.kpis.unread_notifications > 0 },
       ]

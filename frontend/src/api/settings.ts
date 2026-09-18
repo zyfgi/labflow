@@ -3,6 +3,11 @@ import client from './client'
 export interface RuntimeSettings {
   APP_NAME: string
   APP_TIMEZONE: string
+  PUBLIC_BASE_URL: string
+  NOTIFICATION_ENABLED: boolean
+  WEEKLY_REPORT_NOTIFY_ROLES: string[]
+  STUDENT_CAN_CREATE_PROJECT: boolean
+  WECHAT_MINIPROGRAM_ENABLED: boolean
   AI_ENABLED: boolean
   AI_BASE_URL: string
   AI_MODEL: string

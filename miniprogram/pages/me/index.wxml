@@ -1,0 +1,23 @@
+<view class="card" wx:if="{{user}}">
+  <view class="row">
+    <view>
+      <view style="font-weight:600;font-size:34rpx">{{user.name}}</view>
+      <view class="muted">{{user.username}} · {{user.role}}</view>
+    </view>
+  </view>
+</view>
+
+<view class="card">
+  <view class="row" bindtap="goNotifications">
+    <view>通知中心</view>
+    <view class="muted">›</view>
+  </view>
+  <view class="row" bindtap="unbind">
+    <view>解除微信绑定</view>
+    <view class="muted">›</view>
+  </view>
+  <view class="row" bindtap="logout">
+    <view style="color:#f56c6c">退出登录</view>
+    <view class="muted">›</view>
+  </view>
+</view>

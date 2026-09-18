@@ -1,10 +1,16 @@
-"""Equipment ledger + booking + borrow + maintenance APIs.
+"""Equipment ledger + booking + borrow + maintenance + QR tags.
+
+Light process: a booking with no time conflict is reserved immediately
+(approval was removed); borrow/return act at once. The only hard blocks are
+system rules — time conflicts and unavailable equipment. Everything else is
+notify + audit.
 
 Booking overlap rule: for the same equipment, two bookings in status
-pending/approved must never overlap in time
+reserved must never overlap in time
 (new_start < existing_end AND new_end > existing_start).
 """
 
+import secrets
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -35,6 +41,7 @@ from app.schemas.equipment import (
     BookingUpdate,
     BorrowCreate,
     BorrowOut,
+    BorrowUpdate,
     EquipmentCreate,
     EquipmentOut,
     EquipmentUpdate,
@@ -42,12 +49,14 @@ from app.schemas.equipment import (
     MaintenanceOut,
     MaintenanceUpdate,
 )
-from app.services.notifications import create_notification
+from app.services import runtime_settings
+from app.services.notifications import equipment_watcher_ids, notify
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
 bookings_router = APIRouter(prefix="/equipment-bookings", tags=["equipment"])
 borrows_router = APIRouter(prefix="/equipment-borrows", tags=["equipment"])
 maintenance_router = APIRouter(prefix="/equipment-maintenance", tags=["equipment"])
+qr_router = APIRouter(prefix="/qr", tags=["equipment"])
 
 MANAGE_ROLES = (Role.PI, Role.EQUIPMENT_ADMIN)
 # roles that may see every booking/borrow; others only see their own
@@ -74,7 +83,7 @@ def _active_booking_conflict(
 ) -> EquipmentBooking | None:
     stmt = select(EquipmentBooking).where(
         EquipmentBooking.equipment_id == equipment_id,
-        EquipmentBooking.status.in_((BookingStatus.PENDING, BookingStatus.APPROVED)),
+        EquipmentBooking.status == BookingStatus.RESERVED,
         EquipmentBooking.start_time < end,
         EquipmentBooking.end_time > start,
     )
@@ -148,6 +157,11 @@ def create_equipment(
     )
 
 
+def _qr_url(db: Session, token: str) -> str | None:
+    base = runtime_settings.effective(db).PUBLIC_BASE_URL.rstrip("/")
+    return f"{base}/q/{token}" if base else None
+
+
 @router.get("/{equipment_id}")
 def get_equipment(
     equipment_id: int,
@@ -158,6 +172,8 @@ def get_equipment(
     item = EquipmentOut.model_validate(eq).model_dump(mode="json")
     manager = db.get(User, eq.manager_id) if eq.manager_id else None
     item["manager_name"] = manager.name if manager else None
+    item["qr_token"] = eq.qr_token
+    item["qr_url"] = _qr_url(db, eq.qr_token) if eq.qr_token else None
 
     now = utcnow()
     current_booking = db.scalar(
@@ -165,7 +181,7 @@ def get_equipment(
         .options(joinedload(EquipmentBooking.user))
         .where(
             EquipmentBooking.equipment_id == eq.id,
-            EquipmentBooking.status == BookingStatus.APPROVED,
+            EquipmentBooking.status == BookingStatus.RESERVED,
             EquipmentBooking.start_time <= now,
             EquipmentBooking.end_time > now,
         )
@@ -175,7 +191,7 @@ def get_equipment(
         .options(joinedload(EquipmentBooking.user))
         .where(
             EquipmentBooking.equipment_id == eq.id,
-            EquipmentBooking.status == BookingStatus.APPROVED,
+            EquipmentBooking.status == BookingStatus.RESERVED,
             EquipmentBooking.end_time > now,
         )
         .order_by(EquipmentBooking.start_time)
@@ -302,23 +318,43 @@ def create_booking(
     db: Session = Depends(get_db),
 ) -> dict:
     eq = _get_equipment(db, body.equipment_id)
-    if not eq.is_active or eq.status == EquipmentStatus.DISABLED:
+    if not eq.is_active or eq.status in (
+        EquipmentStatus.DISABLED,
+        EquipmentStatus.FAULT,
+        EquipmentStatus.MAINTENANCE,
+    ):
         raise HTTPException(status_code=400, detail="该设备当前不可预约")
     conflict = _active_booking_conflict(db, eq.id, body.start_time, body.end_time)
     if conflict:
         raise HTTPException(
             status_code=409,
             detail=f"预约时间冲突：该设备在 {conflict.start_time.strftime('%m-%d %H:%M')} ~ "
-            f"{conflict.end_time.strftime('%m-%d %H:%M')} 已有有效预约",
+            f"{conflict.end_time.strftime('%m-%d %H:%M')} 已有预约",
         )
-    booking = EquipmentBooking(**body.model_dump(), user_id=user.id)
+    booking = EquipmentBooking(
+        **body.model_dump(),
+        user_id=user.id,
+        status=BookingStatus.RESERVED,
+    )
     db.add(booking)
     db.flush()
     write_audit_log(db, user, "create_booking", "equipment_booking", booking.id)
+    notify(
+        db,
+        equipment_watcher_ids(db, eq),
+        "equipment_booked",
+        "新的设备预约",
+        f"{user.name} 预约了「{eq.name}」"
+        f"（{body.start_time.strftime('%m-%d %H:%M')} ~ "
+        f"{body.end_time.strftime('%m-%d %H:%M')}）",
+        "equipment",
+        eq.id,
+        exclude_user_id=user.id,
+    )
     db.commit()
     return ok(
         BookingOut.model_validate(booking).model_dump(mode="json"),
-        message="预约已提交，等待审批",
+        message="预约成功，已生效",
     )
 
 
@@ -335,7 +371,7 @@ def update_booking(
     is_owner = booking.user_id == user.id
     if not (is_owner or _can_manage_equipment(user)):
         raise HTTPException(status_code=403, detail="没有修改该预约的权限")
-    if booking.status not in (BookingStatus.PENDING, BookingStatus.APPROVED):
+    if booking.status != BookingStatus.RESERVED:
         raise HTTPException(status_code=400, detail="当前状态不能修改预约")
     data = body.model_dump(exclude_unset=True)
     start = data.get("start_time", booking.start_time)
@@ -347,92 +383,12 @@ def update_booking(
     )
     if conflict:
         raise HTTPException(status_code=409, detail="修改后的时间与已有预约冲突")
-    schedule_changed = start != booking.start_time or end != booking.end_time
     for field, value in data.items():
         setattr(booking, field, value)
-    if booking.status == BookingStatus.APPROVED and schedule_changed:
-        # an approved slot moved: it must be re-approved
-        booking.status = BookingStatus.PENDING
-        booking.approved_by = None
-        booking.approved_at = None
     write_audit_log(db, user, "update_booking", "equipment_booking", booking.id)
     db.commit()
     return ok(
         BookingOut.model_validate(booking).model_dump(mode="json"), message="预约已更新"
-    )
-
-
-@bookings_router.post("/{booking_id}/approve")
-def approve_booking(
-    booking_id: int,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> dict:
-    if not _can_manage_equipment(user):
-        raise HTTPException(status_code=403, detail="只有 PI/设备管理员可以审批预约")
-    booking = db.get(EquipmentBooking, booking_id)
-    if not booking:
-        raise HTTPException(status_code=404, detail="预约不存在")
-    if booking.status != BookingStatus.PENDING:
-        raise HTTPException(status_code=400, detail="只有待审批状态的预约可以审批")
-    conflict = _active_booking_conflict(
-        db,
-        booking.equipment_id,
-        booking.start_time,
-        booking.end_time,
-        exclude_id=booking.id,
-    )
-    approved_conflict = conflict and conflict.status == BookingStatus.APPROVED
-    if approved_conflict:
-        raise HTTPException(status_code=409, detail="与已批准的预约时间冲突，无法批准")
-    booking.status = BookingStatus.APPROVED
-    booking.approved_by = user.id
-    booking.approved_at = utcnow()
-    create_notification(
-        db,
-        booking.user_id,
-        "booking_approved",
-        "设备预约已通过",
-        "你的预约已通过审批",
-        "equipment",
-        booking.equipment_id,
-    )
-    write_audit_log(db, user, "approve_booking", "equipment_booking", booking.id)
-    db.commit()
-    return ok(
-        BookingOut.model_validate(booking).model_dump(mode="json"), message="预约已批准"
-    )
-
-
-@bookings_router.post("/{booking_id}/reject")
-def reject_booking(
-    booking_id: int,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> dict:
-    if not _can_manage_equipment(user):
-        raise HTTPException(status_code=403, detail="只有 PI/设备管理员可以审批预约")
-    booking = db.get(EquipmentBooking, booking_id)
-    if not booking:
-        raise HTTPException(status_code=404, detail="预约不存在")
-    if booking.status != BookingStatus.PENDING:
-        raise HTTPException(status_code=400, detail="只有待审批状态的预约可以拒绝")
-    booking.status = BookingStatus.REJECTED
-    booking.approved_by = user.id
-    booking.approved_at = utcnow()
-    create_notification(
-        db,
-        booking.user_id,
-        "booking_rejected",
-        "设备预约被拒绝",
-        "你的设备预约被拒绝，请查看或重新预约",
-        "equipment",
-        booking.equipment_id,
-    )
-    write_audit_log(db, user, "reject_booking", "equipment_booking", booking.id)
-    db.commit()
-    return ok(
-        BookingOut.model_validate(booking).model_dump(mode="json"), message="预约已拒绝"
     )
 
 
@@ -447,10 +403,24 @@ def cancel_booking(
         raise HTTPException(status_code=404, detail="预约不存在")
     if not (booking.user_id == user.id or _can_manage_equipment(user)):
         raise HTTPException(status_code=403, detail="没有取消该预约的权限")
-    if booking.status not in (BookingStatus.PENDING, BookingStatus.APPROVED):
+    if booking.status != BookingStatus.RESERVED:
         raise HTTPException(status_code=400, detail="当前状态不能取消")
     booking.status = BookingStatus.CANCELLED
+    eq = db.get(Equipment, booking.equipment_id)
     write_audit_log(db, user, "cancel_booking", "equipment_booking", booking.id)
+    recipients = [booking.user_id]
+    if eq:
+        recipients += equipment_watcher_ids(db, eq)
+    notify(
+        db,
+        recipients,
+        "equipment_booking_cancelled",
+        "预约已取消",
+        f"{user.name} 取消了「{eq.name if eq else booking.equipment_id}」的预约",
+        "equipment",
+        booking.equipment_id,
+        exclude_user_id=user.id,
+    )
     db.commit()
     return ok(
         BookingOut.model_validate(booking).model_dump(mode="json"), message="预约已取消"
@@ -535,9 +505,72 @@ def create_borrow(
     db.add(borrow)
     eq.status = EquipmentStatus.BORROWED
     write_audit_log(db, user, "borrow_equipment", "equipment_borrow", borrow.id)
+    notify(
+        db,
+        equipment_watcher_ids(db, eq),
+        "equipment_borrowed",
+        "设备借出",
+        f"{user.name} 借用「{eq.name}」，预计 {body.expected_return_time.strftime('%m-%d %H:%M')} 归还",
+        "equipment",
+        eq.id,
+        exclude_user_id=user.id,
+    )
     db.commit()
     return ok(
         BorrowOut.model_validate(borrow).model_dump(mode="json"), message="借出成功"
+    )
+
+
+@borrows_router.patch("/{borrow_id}")
+def update_borrow(
+    borrow_id: int,
+    body: BorrowUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Extend a borrow by pushing the expected return time; no approval needed."""
+    borrow = db.get(EquipmentBorrow, borrow_id)
+    if not borrow:
+        raise HTTPException(status_code=404, detail="借用记录不存在")
+    if not (borrow.borrower_id == user.id or _can_manage_equipment(user)):
+        raise HTTPException(status_code=403, detail="没有修改该借用的权限")
+    if borrow.status not in (BorrowStatus.BORROWED, BorrowStatus.OVERDUE):
+        raise HTTPException(status_code=400, detail="该记录已归还，不能修改")
+    if body.expected_return_time <= utcnow():
+        raise HTTPException(status_code=422, detail="预期归还时间必须晚于当前时间")
+    old = borrow.expected_return_time
+    borrow.expected_return_time = body.expected_return_time
+    if borrow.status == BorrowStatus.OVERDUE:
+        borrow.status = BorrowStatus.BORROWED
+    if body.note is not None:
+        borrow.note = body.note
+    eq = db.get(Equipment, borrow.equipment_id)
+    write_audit_log(
+        db,
+        user,
+        "extend_borrow",
+        "equipment_borrow",
+        borrow.id,
+        {
+            "from": old.isoformat() if old else None,
+            "to": body.expected_return_time.isoformat(),
+        },
+    )
+    notify(
+        db,
+        equipment_watcher_ids(db, eq) if eq else [],
+        "equipment_borrowed",
+        "借用延期",
+        f"{user.name} 将「{eq.name if eq else borrow.equipment_id}」的归还时间推迟到 "
+        f"{body.expected_return_time.strftime('%m-%d %H:%M')}",
+        "equipment",
+        borrow.equipment_id,
+        exclude_user_id=user.id,
+    )
+    db.commit()
+    return ok(
+        BorrowOut.model_validate(borrow).model_dump(mode="json"),
+        message="归还时间已更新",
     )
 
 
@@ -560,6 +593,16 @@ def return_borrow(
     if eq:
         eq.status = EquipmentStatus.AVAILABLE
     write_audit_log(db, user, "return_equipment", "equipment_borrow", borrow.id)
+    notify(
+        db,
+        equipment_watcher_ids(db, eq) if eq else [],
+        "equipment_returned",
+        "设备已归还",
+        f"{user.name} 归还了「{eq.name if eq else borrow.equipment_id}」",
+        "equipment",
+        borrow.equipment_id,
+        exclude_user_id=user.id,
+    )
     db.commit()
     return ok(
         BorrowOut.model_validate(borrow).model_dump(mode="json"), message="归还成功"
@@ -596,6 +639,19 @@ def list_maintenance(
     return paged(items, total, page, page_size)
 
 
+def _affected_booker_ids(db: Session, equipment_id: int) -> list[int]:
+    """Users holding reserved bookings on the equipment from now on."""
+    return list(
+        db.scalars(
+            select(EquipmentBooking.user_id).where(
+                EquipmentBooking.equipment_id == equipment_id,
+                EquipmentBooking.status == BookingStatus.RESERVED,
+                EquipmentBooking.end_time > utcnow(),
+            )
+        )
+    )
+
+
 @maintenance_router.post("", status_code=201)
 def create_maintenance(
     body: MaintenanceCreate,
@@ -613,36 +669,24 @@ def create_maintenance(
     )
     db.add(record)
     if body.type == "fault":
+        # a fault report takes effect immediately, before any admin confirms it
         eq.status = EquipmentStatus.FAULT
-    create_notification(
+    write_audit_log(db, user, "report_fault", "equipment_maintenance", record.id)
+    notify(
         db,
-        eq.manager_id,
+        [*equipment_watcher_ids(db, eq), *_affected_booker_ids(db, eq.id)],
         "equipment_fault",
         "设备故障上报",
-        f"设备「{eq.name}」被上报故障，请及时处理",
+        f"设备「{eq.name}」被 {user.name} 上报{'故障' if body.type == 'fault' else body.type}，"
+        "状态已更新，请及时处理",
         "equipment",
         eq.id,
-    ) if eq.manager_id else None
-    if user.role != Role.EQUIPMENT_ADMIN:
-        for admin_id in db.scalars(
-            select(User.id).where(
-                User.role == Role.EQUIPMENT_ADMIN, User.status == "active"
-            )
-        ):
-            create_notification(
-                db,
-                admin_id,
-                "equipment_fault",
-                "设备故障上报",
-                f"设备「{eq.name}」被上报故障",
-                "equipment",
-                eq.id,
-            )
-    write_audit_log(db, user, "report_fault", "equipment_maintenance", record.id)
+        exclude_user_id=user.id,
+    )
     db.commit()
     return ok(
         MaintenanceOut.model_validate(record).model_dump(mode="json"),
-        message="故障/维修已上报",
+        message="已上报，设备状态已更新",
     )
 
 
@@ -706,8 +750,87 @@ def update_maintenance(
             if not open_records:
                 eq.status = EquipmentStatus.AVAILABLE
     write_audit_log(db, user, "update_maintenance", "equipment_maintenance", record.id)
+    if body.status:
+        status_label = {
+            MaintenanceStatus.PROCESSING: "开始处理",
+            MaintenanceStatus.COMPLETED: "已完成",
+            MaintenanceStatus.CANCELLED: "已取消",
+        }.get(body.status, body.status)
+        notify(
+            db,
+            [record.reporter_id, *(equipment_watcher_ids(db, eq) if eq else [])],
+            "maintenance_updated",
+            "维修进度更新",
+            f"设备「{eq.name if eq else record.equipment_id}」的维修记录{status_label}（{user.name}）",
+            "equipment_maintenance",
+            record.id,
+            exclude_user_id=user.id,
+        )
     db.commit()
     return ok(
         MaintenanceOut.model_validate(record).model_dump(mode="json"),
         message="维修记录已更新",
+    )
+
+
+# ---------------- QR tags ----------------
+
+
+@router.post("/{equipment_id}/qr", status_code=201)
+def generate_qr(
+    equipment_id: int,
+    regenerate: bool = Query(False),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Generate (or regenerate) the equipment QR tag. Regenerating invalidates
+    the old token — the printed old label stops resolving."""
+    if not _can_manage_equipment(user):
+        raise HTTPException(status_code=403, detail="只有 PI/设备管理员可以生成二维码")
+    eq = _get_equipment(db, equipment_id)
+    if eq.qr_token and not regenerate:
+        return ok(
+            {"qr_token": eq.qr_token, "qr_url": _qr_url(db, eq.qr_token)},
+            message="二维码已存在",
+        )
+    old = eq.qr_token
+    eq.qr_token = secrets.token_urlsafe(16)
+    write_audit_log(
+        db,
+        user,
+        "regenerate_qr" if old else "generate_qr",
+        "equipment",
+        eq.id,
+        {"rotated": bool(old)},
+    )
+    db.commit()
+    return ok(
+        {"qr_token": eq.qr_token, "qr_url": _qr_url(db, eq.qr_token)},
+        message="二维码已生成，旧二维码已失效" if old else "二维码已生成",
+    )
+
+
+@qr_router.get("/{token}")
+def resolve_qr(
+    token: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Resolve a scanned QR token. The QR is a pointer, not a credential:
+    normal auth and RBAC still apply to whatever it resolves to."""
+    eq = db.scalar(
+        select(Equipment).where(
+            Equipment.qr_token == token, Equipment.deleted_at.is_(None)
+        )
+    )
+    if not eq:
+        raise HTTPException(status_code=404, detail="二维码无效或已失效")
+    return ok(
+        {
+            "resource_type": "equipment",
+            "equipment_id": eq.id,
+            "asset_no": eq.asset_no,
+            "name": eq.name,
+            "status": eq.status,
+        }
     )

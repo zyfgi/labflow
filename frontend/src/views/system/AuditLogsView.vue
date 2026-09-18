@@ -56,9 +56,13 @@ const items = ref<any[]>([])
 const total = ref(0)
 const actions = [
   'login', 'logout', 'create_user', 'change_role', 'create_project', 'update_project',
-  'delete_project', 'create_experiment', 'update_experiment', 'lock_experiment',
-  'unlock_experiment', 'create_equipment', 'update_equipment', 'approve_booking',
-  'reject_booking', 'borrow_equipment', 'return_equipment', 'report_fault', 'export_data',
+  'delete_project', 'add_project_member', 'create_task', 'update_task', 'update_task_status',
+  'create_weekly_report', 'publish_weekly_report', 'update_weekly_report',
+  'comment_weekly_report', 'create_experiment', 'update_experiment', 'lock_experiment',
+  'unlock_experiment', 'create_equipment', 'update_equipment', 'create_booking',
+  'cancel_booking', 'borrow_equipment', 'extend_borrow', 'return_equipment',
+  'report_fault', 'update_maintenance', 'generate_qr', 'regenerate_qr',
+  'bind_wechat', 'unbind_wechat', 'update_runtime_settings', 'export_data',
 ]
 
 const query = reactive({ page: 1, page_size: 20, action: '' })

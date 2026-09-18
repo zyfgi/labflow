@@ -275,24 +275,21 @@ def seed_domain(db: Session, users: dict) -> None:
             )
         ):
             return
-        reviewer = fields.pop("reviewer", users["admin"])
-        review_comment = fields.pop("review_comment", None)
-        reviewed_at = fields.pop("reviewed_at", None)
+        fields.pop("reviewer", None)
+        fields.pop("review_comment", None)
+        fields.pop("reviewed_at", None)
+        published_at = fields.pop("published_at", None)
+        if published_at is None and status == ReportStatus.PUBLISHED:
+            published_at = datetime.combine(
+                week_start + timedelta(days=4), datetime.min.time()
+            )
         db.add(
             WeeklyReport(
                 member_id=profile.id,
                 week_start=week_start,
                 week_end=week_start + timedelta(days=6),
                 status=status,
-                submitted_at=fields.pop(
-                    "submitted_at",
-                    datetime.combine(
-                        week_start + timedelta(days=4), datetime.min.time()
-                    ),
-                ),
-                reviewer_id=reviewer.id if reviewed_at else None,
-                reviewed_at=reviewed_at,
-                review_comment=review_comment,
+                published_at=published_at,
                 **fields,
             )
         )
@@ -300,7 +297,7 @@ def seed_domain(db: Session, users: dict) -> None:
     report(
         "master01",
         this_monday,
-        ReportStatus.SUBMITTED,
+        ReportStatus.PUBLISHED,
         work_summary="完成 CarSim 联合仿真 demo 搭建",
         learning_summary="学习整车七自由度模型",
         problems="转向阶跃工况发散",
@@ -310,21 +307,16 @@ def seed_domain(db: Session, users: dict) -> None:
     report(
         "master01",
         last_monday,
-        ReportStatus.REVIEWED,
+        ReportStatus.PUBLISHED,
         work_summary="阅读横摆稳定性文献 5 篇",
         learning_summary="整理 LQR 基础",
         next_week_plan="搭建 Simulink 模型",
         self_progress=35,
-        reviewer=users["admin"],
-        review_comment="继续，注意对比不同控制增益",
-        reviewed_at=datetime.combine(
-            last_monday + timedelta(days=6), datetime.min.time()
-        ),
     )
     report(
         "phd01",
         this_monday,
-        ReportStatus.SUBMITTED,
+        ReportStatus.PUBLISHED,
         work_summary="完成垂向刚度辨识算法复现，误差 8%",
         learning_summary="递推最小二乘推导",
         experiment_summary="Myhil 台架第一次标定",
@@ -335,43 +327,28 @@ def seed_domain(db: Session, users: dict) -> None:
     report(
         "phd01",
         last_monday,
-        ReportStatus.REVIEWED,
+        ReportStatus.PUBLISHED,
         work_summary="跑通 UKF 基线",
         next_week_plan="复现论文算法",
         self_progress=50,
-        reviewer=users["admin"],
-        review_comment="基线数据要存档到实验记录",
-        reviewed_at=datetime.combine(
-            last_monday + timedelta(days=6), datetime.min.time()
-        ),
     )
     report(
         "master02",
         this_monday,
-        ReportStatus.RETURNED,
+        ReportStatus.DRAFT,
         work_summary="看了一些资料",
         learning_summary="rl 入门",
         problems="卡在环境配置",
         next_week_plan="继续配置环境",
         self_progress=20,
-        reviewer=users["admin"],
-        review_comment="周报太笼统，请写清楚具体完成了什么、卡在哪一步",
-        reviewed_at=datetime.combine(
-            this_monday + timedelta(days=5), datetime.min.time()
-        ),
     )
     report(
         "master03",
         last_monday,
-        ReportStatus.SUBMITTED,
+        ReportStatus.PUBLISHED,
         work_summary="完成时间戳对齐方案调研报告",
         next_week_plan="实现原型",
         self_progress=90,
-        reviewer=users["teacher01"],
-        review_comment="调研较全面，可以进入实现阶段",
-        reviewed_at=datetime.combine(
-            last_monday + timedelta(days=6), datetime.min.time()
-        ),
     )
     report(
         "master04",
@@ -412,7 +389,7 @@ def seed_domain(db: Session, users: dict) -> None:
                 ("整理 2025 年实车采集数据", "phd01", 20, TaskStatus.DONE, -25, 10),
                 ("递推最小二乘算法实现", "phd01", 55, TaskStatus.IN_PROGRESS, -10, 12),
                 ("IMU 安装误差标定", "master04", 30, TaskStatus.IN_PROGRESS, -5, 20),
-                ("采集数据清洗脚本", "under01", 80, TaskStatus.REVIEW, -12, 3),
+                ("采集数据清洗脚本", "under01", 80, TaskStatus.IN_PROGRESS, -12, 3),
                 ("编写中期汇报材料", "phd01", 10, TaskStatus.TODO, None, 25),
                 ("垂向刚度激励工况设计", "phd01", 0, TaskStatus.TODO, 5, 40),
             ],
@@ -882,19 +859,15 @@ def seed_domain(db: Session, users: dict) -> None:
                 if username.startswith(("master", "phd", "under"))
                 else "课题测试",
                 status=status,
-                approved_by=users["equipadmin"].id
-                if status == BookingStatus.APPROVED
-                else None,
-                approved_at=now if status == BookingStatus.APPROVED else None,
             )
         )
 
-    booking("示波器", "master01", 0, 9, 11, BookingStatus.APPROVED)
-    booking("示波器", "master04", 0, 14, 16, BookingStatus.PENDING)
-    booking("数据采集系统", "phd01", 1, 9, 12, BookingStatus.APPROVED)
-    booking("数据采集系统", "phd02", 1, 10, 11, BookingStatus.PENDING)
-    booking("高性能工作站", "master05", 2, 9, 18, BookingStatus.APPROVED)
-    booking("双 IMU 测试平台", "phd01", 3, 13, 17, BookingStatus.PENDING)
+    booking("示波器", "master01", 0, 9, 11, BookingStatus.RESERVED)
+    booking("示波器", "master04", 0, 14, 16, BookingStatus.RESERVED)
+    booking("数据采集系统", "phd01", 1, 9, 12, BookingStatus.RESERVED)
+    booking("数据采集系统", "phd02", 1, 10, 11, BookingStatus.RESERVED)
+    booking("高性能工作站", "master05", 2, 9, 18, BookingStatus.RESERVED)
+    booking("双 IMU 测试平台", "phd01", 3, 13, 17, BookingStatus.RESERVED)
     booking("电机控制器", "master01", 4, 9, 11, BookingStatus.COMPLETED)
     db.flush()
 

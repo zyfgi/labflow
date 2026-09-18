@@ -150,6 +150,13 @@ const router = createRouter({
         },
       ],
     },
+    {
+      // QR tag landing: PUBLIC_BASE_URL/q/{token} resolves the token server-side
+      // (the QR is a pointer, not a credential — normal auth still applies)
+      path: 'q/:token',
+      name: 'qr-landing',
+      component: () => import('@/views/QrLandingView.vue'),
+    },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
   ],
 })
