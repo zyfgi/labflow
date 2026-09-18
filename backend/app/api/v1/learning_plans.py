@@ -28,19 +28,6 @@ def _get_plan_or_404(db: Session, plan_id: int) -> LearningPlan:
     return plan
 
 
-def _resolve_member_id(db: Session, user: User, member_id: int | None) -> int:
-    if member_id is not None:
-        if not db.get(MemberProfile, member_id):
-            raise HTTPException(status_code=404, detail="成员不存在")
-        return member_id
-    profile = user.member_profile
-    if not profile:
-        raise HTTPException(
-            status_code=400, detail="当前用户没有成员档案，请指定 member_id"
-        )
-    return profile.id
-
-
 def _ensure_can_edit(db: Session, user: User, member_id: int) -> None:
     if is_staff(user):
         return

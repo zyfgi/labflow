@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, write_audit_log
 from app.core.responses import ok, paged
+from app.core.time import utcnow
 from app.database import get_db
 from app.models.project import Milestone, Project, ProjectMember, Task
 from app.models.user import User
@@ -22,6 +23,7 @@ from app.schemas.project import (
     ProjectOut,
     ProjectUpdate,
 )
+from app.services.lookups import id_name_map
 from app.services.notifications import notify, user_ids_with_roles
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -77,12 +79,7 @@ def list_projects(
     ).all()
 
     # batch maps: constant query count regardless of page size
-    owner_ids = {p.owner_id for p in rows if p.owner_id}
-    owner_names = dict(
-        db.execute(
-            select(User.id, User.name).where(User.id.in_(owner_ids or [0]))
-        ).all()
-    )
+    owner_names = id_name_map(db, User.id, User.name, {p.owner_id for p in rows})
     my_memberships = dict(
         db.execute(
             select(ProjectMember.project_id, ProjectMember.project_role).where(
@@ -236,8 +233,6 @@ def delete_project(
     project = _get_project(db, project_id)
     if user.role != "PI" and project.owner_id != user.id:
         raise HTTPException(status_code=403, detail="只有 PI 或项目负责人可以删除项目")
-    from app.models.base import utcnow
-
     project.deleted_at = utcnow()
     write_audit_log(
         db, user, "delete_project", "project", project.id, {"code": project.code}
@@ -396,8 +391,6 @@ def update_milestone(
     ensure_project_manageable(db, user, project)
     data = body.model_dump(exclude_unset=True)
     if data.get("status") == "completed" and milestone.completed_at is None:
-        from app.models.base import utcnow
-
         milestone.completed_at = utcnow()
     for field, value in data.items():
         setattr(milestone, field, value)

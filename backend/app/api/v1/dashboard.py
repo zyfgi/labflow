@@ -29,6 +29,7 @@ from app.models.project import Milestone, Project, ProjectMember, Task
 from app.models.report import WeeklyReport
 from app.models.system import Notification
 from app.models.user import MemberProfile, User
+from app.services.lookups import id_name_map
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -259,12 +260,7 @@ def pi_dashboard(
         .limit(12)
     ).all()
     project_ids = [p.id for p in projects]
-    owner_ids = {p.owner_id for p in projects if p.owner_id}
-    owner_names = dict(
-        db.execute(
-            select(User.id, User.name).where(User.id.in_(owner_ids or [0]))
-        ).all()
-    )
+    owner_names = id_name_map(db, User.id, User.name, {p.owner_id for p in projects})
 
     ptask_rows = db.execute(
         select(
@@ -335,12 +331,8 @@ def pi_dashboard(
         .order_by(EquipmentBorrow.expected_return_time)
         .limit(8)
     ).all()
-    borrow_eq_names = dict(
-        db.execute(
-            select(Equipment.id, Equipment.name).where(
-                Equipment.id.in_({b.equipment_id for b in overdue_borrow_rows} or [0])
-            )
-        ).all()
+    borrow_eq_names = id_name_map(
+        db, Equipment.id, Equipment.name, {b.equipment_id for b in overdue_borrow_rows}
     )
     stale_cutoff = datetime.combine(today - timedelta(days=30), datetime.min.time())
     stale_projects = db.scalars(
@@ -461,18 +453,22 @@ def pi_dashboard(
                 "text": f"任务「{t.title}」完成",
             }
         )
-    for m in db.scalars(
+    maintenance_rows = db.scalars(
         select(EquipmentMaintenance)
         .order_by(EquipmentMaintenance.reported_at.desc())
         .limit(3)
-    ):
-        eq = db.get(Equipment, m.equipment_id)
-        if eq:
+    ).all()
+    maintenance_eq_names = id_name_map(
+        db, Equipment.id, Equipment.name, {m.equipment_id for m in maintenance_rows}
+    )
+    for m in maintenance_rows:
+        eq_name = maintenance_eq_names.get(m.equipment_id)
+        if eq_name:
             activity.append(
                 {
                     "time": (m.reported_at or m.created_at).isoformat(),
                     "type": "equipment",
-                    "text": f"设备「{eq.name}」进入{'维修' if m.status == MaintenanceStatus.PROCESSING else '上报'}状态",
+                    "text": f"设备「{eq_name}」进入{'维修' if m.status == MaintenanceStatus.PROCESSING else '上报'}状态",
                 }
             )
     activity.sort(key=lambda a: a["time"], reverse=True)
@@ -552,17 +548,18 @@ def student_dashboard(
         .order_by(EquipmentBooking.start_time)
         .limit(5)
     ).all()
-    booking_rows = []
-    for b in upcoming_bookings:
-        eq = db.get(Equipment, b.equipment_id)
-        booking_rows.append(
-            {
-                "id": b.id,
-                "equipment_name": eq.name if eq else None,
-                "start_time": b.start_time.isoformat(),
-                "end_time": b.end_time.isoformat(),
-            }
-        )
+    booking_eq_names = id_name_map(
+        db, Equipment.id, Equipment.name, {b.equipment_id for b in upcoming_bookings}
+    )
+    booking_rows = [
+        {
+            "id": b.id,
+            "equipment_name": booking_eq_names.get(b.equipment_id),
+            "start_time": b.start_time.isoformat(),
+            "end_time": b.end_time.isoformat(),
+        }
+        for b in upcoming_bookings
+    ]
 
     my_tasks = db.scalars(
         select(Task)
@@ -574,20 +571,21 @@ def student_dashboard(
         .order_by(Task.due_date.asc().nullslast())
         .limit(8)
     ).all()
-    task_rows = []
-    for t in my_tasks:
-        proj = db.get(Project, t.project_id)
-        task_rows.append(
-            {
-                "id": t.id,
-                "title": t.title,
-                "project_name": proj.name if proj else None,
-                "status": t.status,
-                "due_date": t.due_date.isoformat() if t.due_date else None,
-                "progress": t.progress,
-                "is_overdue": bool(t.due_date and t.due_date < today),
-            }
-        )
+    task_project_names = id_name_map(
+        db, Project.id, Project.name, {t.project_id for t in my_tasks}
+    )
+    task_rows = [
+        {
+            "id": t.id,
+            "title": t.title,
+            "project_name": task_project_names.get(t.project_id),
+            "status": t.status,
+            "due_date": t.due_date.isoformat() if t.due_date else None,
+            "progress": t.progress,
+            "is_overdue": bool(t.due_date and t.due_date < today),
+        }
+        for t in my_tasks
+    ]
 
     recent_experiments = db.scalars(
         select(Experiment)
@@ -630,12 +628,8 @@ def student_dashboard(
         .order_by(EquipmentBorrow.expected_return_time)
         .limit(5)
     ).all()
-    borrow_names = dict(
-        db.execute(
-            select(Equipment.id, Equipment.name).where(
-                Equipment.id.in_({b.equipment_id for b in my_overdue_borrows} or [0])
-            )
-        ).all()
+    borrow_names = id_name_map(
+        db, Equipment.id, Equipment.name, {b.equipment_id for b in my_overdue_borrows}
     )
 
     return ok(

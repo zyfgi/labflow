@@ -1,5 +1,7 @@
 import client from './client'
 
+// Web 端只用到 PI 的绑定码管理；登录/绑定/解绑在微信小程序内完成
+// （见 miniprogram/），Web 前端不提供扫码登录入口。
 export interface BindingCode {
   id: number
   code: string
@@ -18,19 +20,4 @@ export function createBindingCode(payload: { remark?: string; ttl_minutes?: numb
     '/wechat/binding-codes',
     payload,
   )
-}
-
-export function wechatSession(code: string) {
-  return client.post<{ data: { openid: string; bound: boolean; token: string | null } }>(
-    '/wechat/session',
-    { code },
-  )
-}
-
-export function wechatBind(payload: { code: string; username: string; password: string; binding_code: string }) {
-  return client.post<{ data: { token: string } }>('/wechat/bind', payload)
-}
-
-export function wechatUnbind() {
-  return client.delete('/wechat/bind')
 }

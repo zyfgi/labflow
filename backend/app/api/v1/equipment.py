@@ -50,6 +50,7 @@ from app.schemas.equipment import (
     MaintenanceUpdate,
 )
 from app.services import runtime_settings
+from app.services.lookups import id_name_map
 from app.services.notifications import equipment_watcher_ids, notify
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
@@ -121,14 +122,11 @@ def list_equipment(
     rows = db.scalars(
         stmt.order_by(Equipment.id).offset((page - 1) * page_size).limit(page_size)
     ).all()
+    manager_names = id_name_map(db, User.id, User.name, {e.manager_id for e in rows})
     items = []
     for e in rows:
         item = EquipmentOut.model_validate(e).model_dump(mode="json")
-        if e.manager_id:
-            manager = db.get(User, e.manager_id)
-            item["manager_name"] = manager.name if manager else None
-        else:
-            item["manager_name"] = None
+        item["manager_name"] = manager_names.get(e.manager_id)
         items.append(item)
     return paged(items, total, page, page_size)
 
@@ -301,11 +299,13 @@ def list_bookings(
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()
+    equipment_names = id_name_map(
+        db, Equipment.id, Equipment.name, {b.equipment_id for b in rows}
+    )
     items = []
     for b in rows:
         item = BookingOut.model_validate(b).model_dump(mode="json")
-        eq = db.get(Equipment, b.equipment_id)
-        item["equipment_name"] = eq.name if eq else None
+        item["equipment_name"] = equipment_names.get(b.equipment_id)
         item["user_name"] = b.user.name if b.user else None
         items.append(item)
     return paged(items, total, page, page_size)
@@ -451,13 +451,15 @@ def list_borrows(
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.offset((page - 1) * page_size).limit(page_size)).all()
+    equipment_names = id_name_map(
+        db, Equipment.id, Equipment.name, {b.equipment_id for b in rows}
+    )
+    borrower_names = id_name_map(db, User.id, User.name, {b.borrower_id for b in rows})
     items = []
     for b in rows:
         item = BorrowOut.model_validate(b).model_dump(mode="json")
-        eq = db.get(Equipment, b.equipment_id)
-        item["equipment_name"] = eq.name if eq else None
-        borrower = db.get(User, b.borrower_id)
-        item["borrower_name"] = borrower.name if borrower else None
+        item["equipment_name"] = equipment_names.get(b.equipment_id)
+        item["borrower_name"] = borrower_names.get(b.borrower_id)
         if (
             b.status == BorrowStatus.BORROWED
             and b.expected_return_time
@@ -628,13 +630,15 @@ def list_maintenance(
         stmt = stmt.where(EquipmentMaintenance.status == status)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.offset((page - 1) * page_size).limit(page_size)).all()
+    equipment_names = id_name_map(
+        db, Equipment.id, Equipment.name, {m.equipment_id for m in rows}
+    )
+    reporter_names = id_name_map(db, User.id, User.name, {m.reporter_id for m in rows})
     items = []
     for m in rows:
         item = MaintenanceOut.model_validate(m).model_dump(mode="json")
-        eq = db.get(Equipment, m.equipment_id)
-        item["equipment_name"] = eq.name if eq else None
-        reporter = db.get(User, m.reporter_id) if m.reporter_id else None
-        item["reporter_name"] = reporter.name if reporter else None
+        item["equipment_name"] = equipment_names.get(m.equipment_id)
+        item["reporter_name"] = reporter_names.get(m.reporter_id)
         items.append(item)
     return paged(items, total, page, page_size)
 

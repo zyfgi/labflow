@@ -22,6 +22,7 @@ from app.schemas.project import (
     TaskStatusRequest,
     TaskUpdate,
 )
+from app.services.lookups import id_name_map
 from app.services.notifications import notify
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -144,18 +145,11 @@ def list_tasks(
         .limit(page_size)
     ).all()
 
-    project_names = dict(
-        db.execute(
-            select(Project.id, Project.name).where(
-                Project.id.in_({t.project_id for t in rows} or [0])
-            )
-        ).all()
+    project_names = id_name_map(
+        db, Project.id, Project.name, {t.project_id for t in rows}
     )
-    assignee_ids = {t.assignee_id for t in rows if t.assignee_id}
-    assignee_names = dict(
-        db.execute(
-            select(User.id, User.name).where(User.id.in_(assignee_ids or [0]))
-        ).all()
+    assignee_names = id_name_map(
+        db, User.id, User.name, {t.assignee_id for t in rows if t.assignee_id}
     )
     today = app_today()
 

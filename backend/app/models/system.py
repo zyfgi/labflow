@@ -4,7 +4,7 @@ from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
-from app.models.base import utcnow
+from app.core.time import utcnow
 
 
 class AuditLog(Base):

@@ -17,6 +17,7 @@ from app.permissions.projects import (
     visible_project_ids_subquery,
 )
 from app.schemas.experiment import ExperimentCreate, ExperimentOut, ExperimentUpdate
+from app.services.lookups import id_name_map
 from app.services.notifications import notify
 from app.storage import storage_service
 
@@ -138,18 +139,9 @@ def list_experiments(
     ).all()
 
     # batch maps: constant query count regardless of page size
-    owner_ids = {e.owner_id for e in rows if e.owner_id}
-    owner_names = dict(
-        db.execute(
-            select(User.id, User.name).where(User.id.in_(owner_ids or [0]))
-        ).all()
-    )
-    project_names = dict(
-        db.execute(
-            select(Project.id, Project.name).where(
-                Project.id.in_({e.project_id for e in rows} or [0])
-            )
-        ).all()
+    owner_names = id_name_map(db, User.id, User.name, {e.owner_id for e in rows})
+    project_names = id_name_map(
+        db, Project.id, Project.name, {e.project_id for e in rows}
     )
 
     items = []

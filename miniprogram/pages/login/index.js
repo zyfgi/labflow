@@ -9,13 +9,11 @@ Page({
     try {
       const s = await auth.session()
       if (s.bound && s.token) {
-        require('../../utils/auth').saveSession(s)
+        auth.saveSession(s)
         wx.reLaunch({ url: '/pages/home/index' })
         return
       }
-      // not bound: the openid must be attached to an existing account
-      wx.setStorageSync('pending_openid_code', s.openid ? 'needs-bind' : 'needs-bind')
-      wx.navigateTo({ url: '/pages/bind/index' })
+
     } catch (e) {
       this.setData({ error: e.message })
     } finally {

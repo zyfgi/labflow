@@ -18,11 +18,17 @@
 
   <view class="card">
     <view class="card-title">预约设备（无冲突立即生效）</view>
-    <picker mode="date" bindchange="(e)=>onBookingTime({currentTarget:{dataset:{field:'start'}},detail:e.detail})">
-      <view class="row"><text>开始日期</text><text>{{booking.start || '请选择'}}</text></view>
+    <picker mode="date" data-field="startDate" bindchange="onBookingDate">
+      <view class="row"><text>开始日期</text><text>{{booking.startDate || '请选择'}}</text></view>
     </picker>
-    <picker mode="time" bindchange="(e)=>onBookingTime({currentTarget:{dataset:{field:'start'}},detail:e.detail})">
-      <view class="row"><text>开始时间</text><text>{{booking.start || '请选择'}}</text></view>
+    <picker mode="time" data-field="startTime" bindchange="onBookingTime">
+      <view class="row"><text>开始时间</text><text>{{booking.startTime || '请选择'}}</text></view>
+    </picker>
+    <picker mode="date" data-field="endDate" bindchange="onBookingDate">
+      <view class="row"><text>结束日期</text><text>{{booking.endDate || '请选择'}}</text></view>
+    </picker>
+    <picker mode="time" data-field="endTime" bindchange="onBookingTime">
+      <view class="row"><text>结束时间</text><text>{{booking.endTime || '请选择'}}</text></view>
     </picker>
     <button class="btn block" bindtap="book">预约</button>
   </view>

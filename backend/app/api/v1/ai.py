@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, write_audit_log
 from app.core.responses import ok, paged
+from app.core.time import utcnow
 from app.database import get_db
 from app.models.ai import AIConversation, AIMessage
 from app.models.user import User
@@ -200,8 +201,6 @@ def delete_conversation(
     db: Session = Depends(get_db),
 ) -> dict:
     conv = _own_conversation(db, user, conversation_id)
-    from app.models.base import utcnow
-
     conv.deleted_at = utcnow()
     db.commit()
     return ok(message="对话已删除")

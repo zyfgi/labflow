@@ -275,10 +275,7 @@ def seed_domain(db: Session, users: dict) -> None:
             )
         ):
             return
-        fields.pop("reviewer", None)
-        fields.pop("review_comment", None)
-        fields.pop("reviewed_at", None)
-        published_at = fields.pop("published_at", None)
+
         if published_at is None and status == ReportStatus.PUBLISHED:
             published_at = datetime.combine(
                 week_start + timedelta(days=4), datetime.min.time()

@@ -6,8 +6,8 @@ Page({
   data: {
     user: null,
     unread: 0,
-    notifications: [],
     activity: [],
+    attentionCounts: { borrows: 0 },
     loading: true,
   },
 
@@ -20,7 +20,7 @@ Page({
   async load() {
     this.setData({ loading: true })
     try {
-      const notifications = await get('/notifications?page=1&page_size=5')
+      const notifications = await get('/notifications?page=1&page_size=1')
       const isStaff = ['PI', 'TEACHER'].includes(this.data.user && this.data.user.role)
       let activity = []
       let attention = { overdue_borrows: [] }
@@ -34,7 +34,6 @@ Page({
       }
       this.setData({
         unread: notifications.unread || 0,
-        notifications: notifications.items || [],
         activity,
         attentionCounts: {
           borrows: (attention.overdue_borrows || []).length,
@@ -49,16 +48,5 @@ Page({
 
   goNotifications() {
     wx.navigateTo({ url: '/pages/notifications/index' })
-  },
-
-  goItem(n) {
-    const { related_type: t, related_id: id } = n.currentTarget.dataset
-    if (t === 'task' || t === 'project') {
-      wx.navigateTo({ url: `/pages/research/index?tab=${t === 'task' ? 'tasks' : 'projects'}` })
-    } else if (t === 'equipment' || t === 'equipment_maintenance') {
-      wx.navigateTo({ url: `/pages/equipment/index?id=${id}` })
-    } else if (t === 'weekly_report') {
-      wx.navigateTo({ url: '/pages/research/index?tab=reports' })
-    }
   },
 })

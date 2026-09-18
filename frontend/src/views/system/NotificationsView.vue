@@ -3,10 +3,10 @@
     <div class="toolbar">
       <div class="filters">
         <el-checkbox v-model="unreadOnly" border @change="load(1)">只看未读</el-checkbox>
-        <el-select v-model="typeFilter" clearable placeholder="按类型筛选" style="width: 140px" @change="load(1)">
-          <el-option v-for="g in NOTIFICATION_GROUPS" :key="g.label" :label="g.label" :value="g.types[0]">
-            {{ g.label }}
-          </el-option>
+        <el-select v-model="typeFilter" clearable placeholder="按类型筛选" style="width: 150px" @change="load(1)">
+          <el-option-group v-for="g in NOTIFICATION_GROUPS" :key="g.label" :label="g.label">
+            <el-option v-for="t in g.types" :key="t.value" :label="t.label" :value="t.value" />
+          </el-option-group>
         </el-select>
       </div>
       <el-button @click="markAll">全部已读</el-button>
@@ -73,29 +73,17 @@ function typeTag(type: string): string {
   return 'info'
 }
 
-function filterTypes(): string[] | undefined {
-  if (!typeFilter.value) return undefined
-  const group = NOTIFICATION_GROUPS.find((g) => g.types.includes(typeFilter.value))
-  return group?.types
-}
-
 async function load(p?: number) {
   if (p) page.value = p
   loading.value = true
   try {
-    const types = filterTypes()
-    // the API takes a single type; page through with the first type of the group
     const { data } = await listNotifications({
       page: page.value,
       page_size: pageSize,
       unread_only: unreadOnly.value || undefined,
       type: typeFilter.value || undefined,
     })
-    let rows = data.data.items
-    if (types && types.length > 1) {
-      rows = rows.filter((n: AppNotification) => types.includes(n.type))
-    }
-    items.value = rows
+    items.value = data.data.items
     total.value = data.data.total
   } finally {
     loading.value = false

@@ -4,8 +4,6 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.enums import (
-    BOOKING_STATUSES,
-    BORROW_STATUSES,
     EQUIPMENT_STATUSES,
     MAINTENANCE_STATUSES,
     MAINTENANCE_TYPES,
@@ -192,8 +190,6 @@ class MaintenanceOut(BaseModel):
 
 
 __all__ = [
-    "BOOKING_STATUSES",
-    "BORROW_STATUSES",
     "BookingCreate",
     "BookingOut",
     "BookingUpdate",

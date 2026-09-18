@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.time import app_today, time_range
 from app.models.equipment import Equipment, EquipmentBooking, EquipmentMaintenance
 from app.models.user import User
+from app.services.lookups import id_name_map
 from app.services.retrieval.common import truncate
 from app.services.retrieval.entity_resolver import ResolvedEntities
 from app.services.retrieval.types import RetrievalHit, RetrievalPlan
@@ -39,12 +40,7 @@ def search_equipment(
         )
 
     rows = db.scalars(stmt.limit(limit * 2)).all()
-    manager_ids = {e.manager_id for e in rows if e.manager_id}
-    manager_names = dict(
-        db.execute(
-            select(User.id, User.name).where(User.id.in_(manager_ids or [0]))
-        ).all()
-    )
+    manager_names = id_name_map(db, User.id, User.name, {e.manager_id for e in rows})
     hits: list[RetrievalHit] = []
     today = app_today()
     for e in rows:
@@ -134,12 +130,8 @@ def search_maintenance(
     rows = db.scalars(
         stmt.order_by(EquipmentMaintenance.reported_at.desc()).limit(limit * 2)
     ).all()
-    equipment_map = dict(
-        db.execute(
-            select(Equipment.id, Equipment.name).where(
-                Equipment.id.in_({m.equipment_id for m in rows} or [0])
-            )
-        ).all()
+    equipment_map = id_name_map(
+        db, Equipment.id, Equipment.name, {m.equipment_id for m in rows}
     )
     hits: list[RetrievalHit] = []
     for m in rows:
@@ -222,12 +214,8 @@ def search_bookings(
     rows = db.scalars(
         stmt.order_by(EquipmentBooking.start_time.desc()).limit(limit * 2)
     ).all()
-    equipment_map = dict(
-        db.execute(
-            select(Equipment.id, Equipment.name).where(
-                Equipment.id.in_({b.equipment_id for b in rows} or [0])
-            )
-        ).all()
+    equipment_map = id_name_map(
+        db, Equipment.id, Equipment.name, {b.equipment_id for b in rows}
     )
     hits: list[RetrievalHit] = []
     for b in rows:

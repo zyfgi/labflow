@@ -7,8 +7,7 @@ Page({
   data: {
     equipment: null,
     loading: false,
-    booking: { start: '', end: '' },
-    borrowHours: 24,
+    booking: { startDate: '', startTime: '', endDate: '', endTime: '' },
   },
 
   onShow() {
@@ -47,21 +46,27 @@ Page({
     }
   },
 
+  onBookingDate(e) {
+    this.setData({ booking: { ...this.data.booking, [e.currentTarget.dataset.field]: e.detail.value } })
+  },
+
   onBookingTime(e) {
     this.setData({ booking: { ...this.data.booking, [e.currentTarget.dataset.field]: e.detail.value } })
   },
 
   async book() {
     const { equipment, booking } = this.data
-    if (!booking.start || !booking.end) {
-      wx.showToast({ title: '请选择预约时间', icon: 'none' })
+    const start = booking.startDate && booking.startTime && `${booking.startDate}T${booking.startTime}`
+    const end = booking.endDate && booking.endTime && `${booking.endDate}T${booking.endTime}`
+    if (!start || !end) {
+      wx.showToast({ title: '请选择开始与结束时间', icon: 'none' })
       return
     }
     try {
       await post('/equipment-bookings', {
         equipment_id: equipment.id,
-        start_time: booking.start.replace(' ', 'T'),
-        end_time: booking.end.replace(' ', 'T'),
+        start_time: start,
+        end_time: end,
       })
       wx.showToast({ title: '预约成功，已生效' })
       this.detail(equipment.id)
@@ -71,10 +76,9 @@ Page({
   },
 
   async borrow() {
-    const { equipment, borrowHours } = this.data
-    const expected = new Date(Date.now() + borrowHours * 3600 * 1000)
-      .toISOString()
-      .slice(0, 19)
+    const { equipment } = this.data
+    // default borrow window: 24 hours
+    const expected = new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 19)
     try {
       await post('/equipment-borrows', {
         equipment_id: equipment.id,
@@ -89,12 +93,17 @@ Page({
 
   async returnBorrow() {
     const { equipment } = this.data
-    if (!equipment.active_borrow_id) {
-      wx.showToast({ title: '当前账号没有进行中的借用', icon: 'none' })
-      return
-    }
     try {
-      await post(`/equipment-borrows/${equipment.active_borrow_id}/return`)
+      // find my open borrow for this equipment, then return it
+      const data = await get('/equipment-borrows?mine=true&page_size=50')
+      const borrow = (data.items || []).find(
+        (b) => b.equipment_id === equipment.id && (b.status === 'borrowed' || b.status === 'overdue'),
+      )
+      if (!borrow) {
+        wx.showToast({ title: '当前账号没有该设备的借用', icon: 'none' })
+        return
+      }
+      await post(`/equipment-borrows/${borrow.id}/return`)
       wx.showToast({ title: '已归还' })
       this.detail(equipment.id)
     } catch (e) {
