@@ -54,7 +54,9 @@ def resolve_entities(
     # experiment number (regex-shaped, exact)
     m = _EXPERIMENT_NO_RE.search(text.upper())
     if m:
-        exp_id = db.scalar(select(Experiment.id).where(Experiment.experiment_no == m.group(0)))
+        exp_id = db.scalar(
+            select(Experiment.id).where(Experiment.experiment_no == m.group(0))
+        )
         if exp_id:
             result.experiment_id = exp_id
 
@@ -70,7 +72,9 @@ def resolve_entities(
 
     # project: one query for (id, name, code), one for the chosen row
     rows = db.execute(
-        select(Project.id, Project.name, Project.code).where(Project.deleted_at.is_(None))
+        select(Project.id, Project.name, Project.code).where(
+            Project.deleted_at.is_(None)
+        )
     ).all()
     best_id, best_len = None, 0
     for pid, name, code in rows:

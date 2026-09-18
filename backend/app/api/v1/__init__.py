@@ -1,1 +1,5 @@
-# placeholder module for Milestone 0; real routers arrive with Milestone 1
+"""API v1 routers."""
+
+from fastapi import FastAPI
+
+api_v1_prefix = "/api/v1"

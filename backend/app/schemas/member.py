@@ -3,6 +3,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import MEMBER_STATUSES, MEMBER_TYPES
+from app.schemas.base import StrictSchema
 from app.schemas.user import UserOut
 
 
@@ -18,7 +19,7 @@ def _check_member_status(value: str | None) -> str | None:
     return value
 
 
-class MemberCreate(BaseModel):
+class MemberCreate(StrictSchema):
     user_id: int
     student_no: str | None = Field(default=None, max_length=30)
     member_type: str = "master"
@@ -35,7 +36,7 @@ class MemberCreate(BaseModel):
     _status_v = field_validator("status")(_check_member_status)
 
 
-class MemberUpdate(BaseModel):
+class MemberUpdate(StrictSchema):
     student_no: str | None = Field(default=None, max_length=30)
     member_type: str | None = None
     grade_year: str | None = Field(default=None, max_length=20)

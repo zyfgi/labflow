@@ -1,7 +1,15 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -13,7 +21,9 @@ if TYPE_CHECKING:
 
 class WeeklyReport(Base, TimestampMixin):
     __tablename__ = "weekly_reports"
-    __table_args__ = (UniqueConstraint("member_id", "week_start", name="uq_member_week"),)
+    __table_args__ = (
+        UniqueConstraint("member_id", "week_start", name="uq_member_week"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     member_id: Mapped[int] = mapped_column(
@@ -30,7 +40,9 @@ class WeeklyReport(Base, TimestampMixin):
     need_help: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     self_progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    status: Mapped[str] = mapped_column(String(20), default="draft", index=True, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="draft", index=True, nullable=False
+    )
 
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

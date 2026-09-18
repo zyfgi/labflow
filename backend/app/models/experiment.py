@@ -15,7 +15,9 @@ class Experiment(Base, TimestampMixin):
     __tablename__ = "experiments"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    experiment_no: Mapped[str] = mapped_column(String(30), unique=True, index=True, nullable=False)
+    experiment_no: Mapped[str] = mapped_column(
+        String(30), unique=True, index=True, nullable=False
+    )
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=False
     )
@@ -31,8 +33,12 @@ class Experiment(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True
     )
 
-    experiment_date: Mapped[date | None] = mapped_column(Date, index=True, nullable=True)
-    status: Mapped[str] = mapped_column(String(20), default="draft", index=True, nullable=False)
+    experiment_date: Mapped[date | None] = mapped_column(
+        Date, index=True, nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="draft", index=True, nullable=False
+    )
 
     environment: Mapped[str | None] = mapped_column(Text, nullable=True)
     method: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -47,13 +53,17 @@ class Experiment(Base, TimestampMixin):
     dataset_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     software_version: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
-    is_locked: Mapped[bool] = mapped_column(Boolean, default=False, index=True, nullable=False)
+    is_locked: Mapped[bool] = mapped_column(
+        Boolean, default=False, index=True, nullable=False
+    )
     locked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     locked_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
 
     owner_ref: Mapped["User"] = relationship(foreign_keys=[owner_id])
 
@@ -72,4 +82,6 @@ class ExperimentAttachment(Base):
     uploaded_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )

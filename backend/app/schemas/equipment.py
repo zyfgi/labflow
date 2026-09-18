@@ -10,6 +10,7 @@ from app.models.enums import (
     MAINTENANCE_STATUSES,
     MAINTENANCE_TYPES,
 )
+from app.schemas.base import StrictSchema
 
 
 def _check(value: str | None, allowed: list | tuple, label: str) -> str | None:
@@ -18,7 +19,7 @@ def _check(value: str | None, allowed: list | tuple, label: str) -> str | None:
     return value
 
 
-class EquipmentCreate(BaseModel):
+class EquipmentCreate(StrictSchema):
     asset_no: str = Field(min_length=1, max_length=50)
     name: str = Field(min_length=1, max_length=200)
     category: str = Field(min_length=1, max_length=50)
@@ -32,10 +33,12 @@ class EquipmentCreate(BaseModel):
     booking_required: bool = False
     status: str = "available"
 
-    _status_v = field_validator("status")(lambda v: _check(v, EQUIPMENT_STATUSES, "设备状态"))
+    _status_v = field_validator("status")(
+        lambda v: _check(v, EQUIPMENT_STATUSES, "设备状态")
+    )
 
 
-class EquipmentUpdate(BaseModel):
+class EquipmentUpdate(StrictSchema):
     name: str | None = Field(default=None, max_length=200)
     category: str | None = Field(default=None, max_length=50)
     manufacturer: str | None = Field(default=None, max_length=200)
@@ -49,7 +52,9 @@ class EquipmentUpdate(BaseModel):
     is_active: bool | None = None
     status: str | None = None
 
-    _status_v = field_validator("status")(lambda v: _check(v, EQUIPMENT_STATUSES, "设备状态"))
+    _status_v = field_validator("status")(
+        lambda v: _check(v, EQUIPMENT_STATUSES, "设备状态")
+    )
 
 
 class EquipmentOut(BaseModel):
@@ -75,7 +80,7 @@ class EquipmentOut(BaseModel):
     updated_at: datetime
 
 
-class BookingCreate(BaseModel):
+class BookingCreate(StrictSchema):
     equipment_id: int
     project_id: int | None = None
     start_time: datetime
@@ -89,7 +94,7 @@ class BookingCreate(BaseModel):
         return self
 
 
-class BookingUpdate(BaseModel):
+class BookingUpdate(StrictSchema):
     start_time: datetime | None = None
     end_time: datetime | None = None
     purpose: str | None = Field(default=None, max_length=2000)
@@ -113,7 +118,7 @@ class BookingOut(BaseModel):
     updated_at: datetime
 
 
-class BorrowCreate(BaseModel):
+class BorrowCreate(StrictSchema):
     equipment_id: int
     expected_return_time: datetime
     purpose: str | None = Field(default=None, max_length=2000)
@@ -137,15 +142,17 @@ class BorrowOut(BaseModel):
     updated_at: datetime
 
 
-class MaintenanceCreate(BaseModel):
+class MaintenanceCreate(StrictSchema):
     equipment_id: int
     type: str = "fault"
     description: str | None = Field(default=None, max_length=5000)
 
-    _type_v = field_validator("type")(lambda v: _check(v, MAINTENANCE_TYPES, "维修类型"))
+    _type_v = field_validator("type")(
+        lambda v: _check(v, MAINTENANCE_TYPES, "维修类型")
+    )
 
 
-class MaintenanceUpdate(BaseModel):
+class MaintenanceUpdate(StrictSchema):
     type: str | None = None
     description: str | None = Field(default=None, max_length=5000)
     status: str | None = None
@@ -153,8 +160,12 @@ class MaintenanceUpdate(BaseModel):
     vendor: str | None = Field(default=None, max_length=200)
     result: str | None = Field(default=None, max_length=5000)
 
-    _type_v = field_validator("type")(lambda v: _check(v, MAINTENANCE_TYPES, "维修类型"))
-    _status_v = field_validator("status")(lambda v: _check(v, MAINTENANCE_STATUSES, "维修状态"))
+    _type_v = field_validator("type")(
+        lambda v: _check(v, MAINTENANCE_TYPES, "维修类型")
+    )
+    _status_v = field_validator("status")(
+        lambda v: _check(v, MAINTENANCE_STATUSES, "维修状态")
+    )
 
 
 class MaintenanceOut(BaseModel):

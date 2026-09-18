@@ -1,6 +1,6 @@
-"""AI chat orchestration: rate limit → (optional) LLM planner → permission-
-scoped local retrieval → bounded context → provider call → persistence +
-audit. Every turn re-runs retrieval with the *current* user permissions.
+"""AI chat orchestration: rate limit → permission-scoped local retrieval →
+bounded context → one provider call → persistence + audit. Every turn re-runs
+retrieval with the *current* user permissions and the *current* runtime config.
 """
 
 import logging
@@ -8,13 +8,13 @@ import time
 
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.core.time import utcnow
 from app.core.deps import write_audit_log
+from app.core.time import utcnow
 from app.models.ai import AIConversation, AIMessage, AIRequestLog
 from app.models.user import User
+from app.services import runtime_settings
 from app.services.ai.context_builder import build_context
-from app.services.ai.errors import AIError, AIDisabledError
+from app.services.ai.errors import AIDisabledError, AIError
 from app.services.ai.prompts import NO_RESULT_ANSWER, SYSTEM_PROMPT
 from app.services.ai.provider import LLMProvider, build_provider
 from app.services.ai.rate_limit import limiter
@@ -44,7 +44,11 @@ def _get_or_create_conversation(
 def _recent_history(conv: AIConversation) -> list[dict]:
     """Recent turns only; each new turn re-retrieves fresh data anyway."""
     msgs = sorted(conv.messages, key=lambda m: m.id)[-HISTORY_MESSAGE_LIMIT:]
-    return [{"role": m.role, "content": m.content} for m in msgs if m.role in ("user", "assistant")]
+    return [
+        {"role": m.role, "content": m.content}
+        for m in msgs
+        if m.role in ("user", "assistant")
+    ]
 
 
 async def ai_chat(
@@ -54,13 +58,16 @@ async def ai_chat(
     conversation_id: int | None = None,
     provider: LLMProvider | None = None,
 ) -> dict:
-    if not settings.AI_ENABLED and provider is None:
+    cfg = runtime_settings.effective(db)
+    if not cfg.AI_ENABLED and provider is None:
         raise AIDisabledError("AI_ENABLED is false")
-    limiter.check(user.id)
+    limiter.check(user.id, cfg.AI_RATE_LIMIT_PER_MINUTE, cfg.AI_RATE_LIMIT_PER_DAY)
 
     started = time.perf_counter()
     own_provider = provider is None
-    provider = provider or build_provider()  # AIConfigError if misconfigured
+    if provider is None:
+        api_key = runtime_settings.get_ai_api_key(db)
+        provider = build_provider(cfg, api_key)  # AIConfigError if misconfigured
 
     conversation = _get_or_create_conversation(db, user, conversation_id, message)
     db.add(AIMessage(conversation_id=conversation.id, role="user", content=message))
@@ -74,7 +81,7 @@ async def ai_chat(
     try:
         plan = parse_query(message)
         _plan, hits = retrieve(
-            db, user, message, plan=plan, limit=settings.AI_MAX_RETRIEVAL_HITS
+            db, user, message, plan=plan, limit=cfg.AI_MAX_RETRIEVAL_HITS
         )
         retrieval_count = len(hits)
 
@@ -83,7 +90,11 @@ async def ai_chat(
             provider_model = getattr(provider, "model", None)
             input_tokens = output_tokens = None
         else:
-            context = build_context(hits)
+            context = build_context(
+                hits,
+                max_chars=cfg.AI_MAX_CONTEXT_CHARS,
+                timezone_label=cfg.APP_TIMEZONE,
+            )
             chat_messages = (
                 [{"role": "system", "content": SYSTEM_PROMPT}]
                 + _recent_history(conversation)
@@ -95,7 +106,9 @@ async def ai_chat(
             input_tokens, output_tokens = resp.input_tokens, resp.output_tokens
 
         sources = [
-            AISource(type=h.source_type, id=h.source_id, title=h.title, url=h.url).model_dump()
+            AISource(
+                type=h.source_type, id=h.source_id, title=h.title, url=h.url
+            ).model_dump()
             for h in hits
         ]
         db.add(
@@ -124,7 +137,11 @@ async def ai_chat(
             )
         )
         write_audit_log(
-            db, user, "ai_provider_error", "ai_conversation", conversation.id,
+            db,
+            user,
+            "ai_provider_error",
+            "ai_conversation",
+            conversation.id,
             {"error_code": e.code, "latency_ms": latency_ms},
         )
         db.commit()
@@ -151,14 +168,18 @@ async def ai_chat(
         )
     )
     write_audit_log(
-        db, user, "ai_chat", "ai_conversation", conversation.id,
+        db,
+        user,
+        "ai_chat",
+        "ai_conversation",
+        conversation.id,
         {
             "model": provider_model,
             "retrieval_count": retrieval_count,
             "latency_ms": latency_ms,
             "status": status,
             # query text stored only when explicitly configured
-            **({"query": message[:200]} if settings.AI_AUDIT_STORE_QUERY else {}),
+            **({"query": message[:200]} if cfg.AI_AUDIT_STORE_QUERY else {}),
         },
     )
     db.commit()

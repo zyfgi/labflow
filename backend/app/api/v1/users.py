@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, require_pi, require_teacher_or_pi, write_audit_log
+from app.core.deps import (
+    get_current_user,
+    require_pi,
+    require_teacher_or_pi,
+    write_audit_log,
+)
 from app.core.responses import ok, paged
 from app.core.security import hash_password
 from app.database import get_db
@@ -30,12 +35,16 @@ def list_users(
         stmt = stmt.where(User.status == status)
     if keyword:
         kw = f"%{keyword}%"
-        stmt = stmt.where(or_(User.username.ilike(kw), User.name.ilike(kw), User.email.ilike(kw)))
+        stmt = stmt.where(
+            or_(User.username.ilike(kw), User.name.ilike(kw), User.email.ilike(kw))
+        )
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(
         stmt.order_by(User.id).offset((page - 1) * page_size).limit(page_size)
     ).all()
-    return paged([UserOut.model_validate(u).model_dump() for u in rows], total, page, page_size)
+    return paged(
+        [UserOut.model_validate(u).model_dump() for u in rows], total, page, page_size
+    )
 
 
 @router.get("/options")
@@ -72,7 +81,9 @@ def create_user(
     )
     db.add(new_user)
     db.flush()
-    write_audit_log(db, user, "create_user", "user", new_user.id, {"username": new_user.username})
+    write_audit_log(
+        db, user, "create_user", "user", new_user.id, {"username": new_user.username}
+    )
     db.commit()
     return ok(UserOut.model_validate(new_user).model_dump(), message="用户创建成功")
 
@@ -106,15 +117,19 @@ def update_user(
     if "email" in data and data["email"] != target.email:
         if db.scalar(select(User).where(User.email == data["email"])):
             raise HTTPException(status_code=409, detail="邮箱已被使用")
-    if "role" in data and data["role"]:
+    if data.get("role"):
         if data["role"] not in ALL_ROLES:
             raise HTTPException(status_code=400, detail="无效的角色")
         if data["role"] != target.role:
             write_audit_log(
-                db, user, "change_role", "user", target.id,
+                db,
+                user,
+                "change_role",
+                "user",
+                target.id,
                 {"username": target.username, "from": target.role, "to": data["role"]},
             )
-    if "password" in data and data["password"]:
+    if data.get("password"):
         target.password_hash = hash_password(data.pop("password"))
         target.must_change_password = True
     if "status" in data and data["status"] not in ("active", "inactive"):
@@ -123,6 +138,8 @@ def update_user(
     for field, value in data.items():
         if value is not None or field in ("phone", "avatar_url"):
             setattr(target, field, value)
-    write_audit_log(db, user, "update_user", "user", target.id, {"fields": list(data.keys())})
+    write_audit_log(
+        db, user, "update_user", "user", target.id, {"fields": list(data.keys())}
+    )
     db.commit()
     return ok(UserOut.model_validate(target).model_dump(), message="用户更新成功")

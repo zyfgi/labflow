@@ -22,13 +22,13 @@ os.environ["LABFLOW_SECRET_KEY"] = "test-secret-key-not-for-production"
 os.environ["AI_RATE_LIMIT_PER_MINUTE"] = "1000"
 os.environ["AI_RATE_LIMIT_PER_DAY"] = "10000"
 
-from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy.orm import Session  # noqa: E402
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
-from app.core.security import create_access_token, hash_password  # noqa: E402
-from app.database import Base, SessionLocal, get_db  # noqa: E402
-from app.main import app  # noqa: E402
-from app.models.user import MemberProfile, User  # noqa: E402
+from app.core.security import create_access_token, hash_password
+from app.database import Base, SessionLocal, get_db
+from app.main import app
+from app.models.user import MemberProfile, User
 
 
 @pytest.fixture()
@@ -79,6 +79,18 @@ def make_user(
     return user
 
 
+def enable_ai(db, **overrides):
+    """Point the runtime settings row at the fake provider for tests."""
+    from app.services import runtime_settings
+    from app.services.runtime_settings import RuntimeSettingsUpdate
+
+    payload = {"AI_ENABLED": True, "AI_DEBUG_RETRIEVAL": True}
+    payload.update(overrides)
+    runtime_settings.update_runtime(
+        db, RuntimeSettingsUpdate(**payload), updated_by=None
+    )
+
+
 def auth_headers(user: User) -> dict[str, str]:
     token = create_access_token(str(user.id), {"role": user.role})
     return {"Authorization": f"Bearer {token}"}
@@ -91,7 +103,9 @@ def pi(db: Session) -> User:
 
 @pytest.fixture()
 def teacher(db: Session) -> User:
-    return make_user(db, "teacher_test", role="TEACHER", name="李老师", member_type="teacher")
+    return make_user(
+        db, "teacher_test", role="TEACHER", name="李老师", member_type="teacher"
+    )
 
 
 @pytest.fixture()
@@ -106,4 +120,10 @@ def student_b(db: Session) -> User:
 
 @pytest.fixture()
 def equip_admin(db: Session) -> User:
-    return make_user(db, "equipadmin_test", role="EQUIPMENT_ADMIN", name="徐管理", member_type="assistant")
+    return make_user(
+        db,
+        "equipadmin_test",
+        role="EQUIPMENT_ADMIN",
+        name="徐管理",
+        member_type="assistant",
+    )

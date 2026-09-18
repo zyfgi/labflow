@@ -16,7 +16,9 @@ engine = create_engine(
     echo=settings.DB_ECHO,
 )
 
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
+SessionLocal = sessionmaker(
+    bind=engine, autocommit=False, autoflush=False, expire_on_commit=False
+)
 
 
 class Base(DeclarativeBase):

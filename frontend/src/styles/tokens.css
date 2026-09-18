@@ -1,0 +1,10 @@
+:root {
+  --lf-page-bg: #f5f6f8;
+  --lf-card-radius: 8px;
+  --lf-border: #e4e7ed;
+  --lf-muted: #909399;
+  --lf-page-gap: 16px;
+  --lf-spacing: 8px;
+  --lf-sidebar-width: 220px;
+  --lf-sidebar-collapsed-width: 64px;
+}

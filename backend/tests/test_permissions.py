@@ -62,7 +62,9 @@ def test_duplicate_username_rejected(client, db, pi, student):
 
 def test_pi_can_change_role(client, db, pi, student):
     resp = client.patch(
-        f"/api/v1/users/{student.id}", json={"role": "TEACHER"}, headers=auth_headers(pi)
+        f"/api/v1/users/{student.id}",
+        json={"role": "TEACHER"},
+        headers=auth_headers(pi),
     )
     assert resp.status_code == 200
     assert resp.json()["data"]["role"] == "TEACHER"
@@ -70,14 +72,18 @@ def test_pi_can_change_role(client, db, pi, student):
 
 def test_student_cannot_change_role(client, db, pi, student, student_b):
     resp = client.patch(
-        f"/api/v1/users/{student_b.id}", json={"role": "PI"}, headers=auth_headers(student)
+        f"/api/v1/users/{student_b.id}",
+        json={"role": "PI"},
+        headers=auth_headers(student),
     )
     assert resp.status_code == 403
 
 
 def test_inactive_user_cannot_authenticate(client, db, pi, student):
     resp = client.patch(
-        f"/api/v1/users/{student.id}", json={"status": "inactive"}, headers=auth_headers(pi)
+        f"/api/v1/users/{student.id}",
+        json={"status": "inactive"},
+        headers=auth_headers(pi),
     )
     assert resp.status_code == 200
     resp = client.get("/api/v1/auth/me", headers=auth_headers(student))

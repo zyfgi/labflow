@@ -25,7 +25,9 @@ def create_admin() -> None:
     username = (os.environ.get("ADMIN_USERNAME") or input("管理员用户名: ")).strip()
     name = (os.environ.get("ADMIN_NAME") or input("显示姓名: ")).strip() or username
     email = (os.environ.get("ADMIN_EMAIL") or input("邮箱: ")).strip()
-    password = os.environ.get("ADMIN_PASSWORD") or getpass.getpass("密码（至少 8 位）: ")
+    password = os.environ.get("ADMIN_PASSWORD") or getpass.getpass(
+        "密码（至少 8 位）: "
+    )
 
     if not username or not email:
         sys.exit("错误：用户名与邮箱不能为空")

@@ -4,7 +4,9 @@ from tests.conftest import auth_headers
 
 
 def test_login_ok(client, db, pi):
-    resp = client.post("/api/v1/auth/login", json={"username": "pi_test", "password": "pass123456"})
+    resp = client.post(
+        "/api/v1/auth/login", json={"username": "pi_test", "password": "pass123456"}
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert body["access_token"]
@@ -15,20 +17,25 @@ def test_login_ok(client, db, pi):
 
 def test_login_by_email(client, db, pi):
     resp = client.post(
-        "/api/v1/auth/login", json={"username": "pi_test@test.local", "password": "pass123456"}
+        "/api/v1/auth/login",
+        json={"username": "pi_test@test.local", "password": "pass123456"},
     )
     assert resp.status_code == 200
 
 
 def test_login_wrong_password(client, db, pi):
-    resp = client.post("/api/v1/auth/login", json={"username": "pi_test", "password": "wrong-pass"})
+    resp = client.post(
+        "/api/v1/auth/login", json={"username": "pi_test", "password": "wrong-pass"}
+    )
     assert resp.status_code == 401
     # generic message, must not reveal which part failed
     assert resp.json()["detail"] == "用户名或密码错误"
 
 
 def test_login_unknown_user_same_message(client, db, pi):
-    resp = client.post("/api/v1/auth/login", json={"username": "ghost", "password": "whatever"})
+    resp = client.post(
+        "/api/v1/auth/login", json={"username": "ghost", "password": "whatever"}
+    )
     assert resp.status_code == 401
     assert resp.json()["detail"] == "用户名或密码错误"
 
@@ -39,7 +46,9 @@ def test_me_requires_token(client, db, pi):
 
 
 def test_me_rejects_bad_token(client, db, pi):
-    resp = client.get("/api/v1/auth/me", headers={"Authorization": "Bearer not-a-token"})
+    resp = client.get(
+        "/api/v1/auth/me", headers={"Authorization": "Bearer not-a-token"}
+    )
     assert resp.status_code == 401
 
 
@@ -61,12 +70,14 @@ def test_change_password_flow(client, db, student):
 
     # old password no longer works
     resp = client.post(
-        "/api/v1/auth/login", json={"username": "student_test", "password": "pass123456"}
+        "/api/v1/auth/login",
+        json={"username": "student_test", "password": "pass123456"},
     )
     assert resp.status_code == 401
 
     resp = client.post(
-        "/api/v1/auth/login", json={"username": "student_test", "password": "newpass456789"}
+        "/api/v1/auth/login",
+        json={"username": "student_test", "password": "newpass456789"},
     )
     assert resp.status_code == 200
 

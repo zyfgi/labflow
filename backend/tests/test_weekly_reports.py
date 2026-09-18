@@ -24,7 +24,9 @@ def create_report(client, student, week=None, **overrides) -> dict:
         "self_progress": 40,
     }
     payload.update(overrides)
-    resp = client.post("/api/v1/weekly-reports", json=payload, headers=auth_headers(student))
+    resp = client.post(
+        "/api/v1/weekly-reports", json=payload, headers=auth_headers(student)
+    )
     assert resp.status_code == 201, resp.text
     return resp.json()["data"]
 
@@ -50,7 +52,9 @@ def test_full_review_flow(client, db, pi, student):
     report = create_report(client, student)
 
     # student submits
-    resp = client.post(f"/api/v1/weekly-reports/{report['id']}/submit", headers=auth_headers(student))
+    resp = client.post(
+        f"/api/v1/weekly-reports/{report['id']}/submit", headers=auth_headers(student)
+    )
     assert resp.status_code == 200
     assert resp.json()["data"]["status"] == "submitted"
 
@@ -85,7 +89,9 @@ def test_full_review_flow(client, db, pi, student):
 
 def test_return_and_resubmit_flow(client, pi, student):
     report = create_report(client, student)
-    client.post(f"/api/v1/weekly-reports/{report['id']}/submit", headers=auth_headers(student))
+    client.post(
+        f"/api/v1/weekly-reports/{report['id']}/submit", headers=auth_headers(student)
+    )
 
     resp = client.post(
         f"/api/v1/weekly-reports/{report['id']}/return",
@@ -104,7 +110,9 @@ def test_return_and_resubmit_flow(client, pi, student):
     assert resp.status_code == 200
     assert resp.json()["data"]["problems"].startswith("UKF")
 
-    resp = client.post(f"/api/v1/weekly-reports/{report['id']}/submit", headers=auth_headers(student))
+    resp = client.post(
+        f"/api/v1/weekly-reports/{report['id']}/submit", headers=auth_headers(student)
+    )
     assert resp.status_code == 200
     assert resp.json()["data"]["status"] == "submitted"
 
@@ -118,7 +126,9 @@ def test_student_cannot_edit_others_report(client, db, pi, student, student_b):
     )
     assert resp.status_code == 403
 
-    resp = client.get(f"/api/v1/weekly-reports/{report['id']}", headers=auth_headers(student))
+    resp = client.get(
+        f"/api/v1/weekly-reports/{report['id']}", headers=auth_headers(student)
+    )
     assert resp.status_code == 403
 
     # student only sees own reports in list
@@ -136,18 +146,14 @@ def test_pi_can_list_all_reports(client, pi, student, student_b):
     assert resp.json()["data"]["total"] >= 2
 
 
-def test_student_cannot_create_report_for_other(client, db, student, student_b):
+def test_report_create_rejects_unknown_fields(client, db, student):
+    """member_id is not part of the create schema and must not be ignored."""
     resp = client.post(
         "/api/v1/weekly-reports",
-        json={"week_start": monday().isoformat(), "member_id": student_b.member_profile.id},
+        json={"week_start": monday().isoformat(), "member_id": 999},
         headers=auth_headers(student),
     )
-    # member_id is not part of the create schema; report goes to own member
-    # the created report must belong to the requesting student
-    if resp.status_code == 201:
-        assert resp.json()["data"]["member_id"] == student.member_profile.id
-    else:
-        assert resp.status_code in (403, 409)
+    assert resp.status_code == 422
 
 
 def test_non_monday_unique_constraint(client, student):
@@ -159,3 +165,25 @@ def test_non_monday_unique_constraint(client, student):
         headers=auth_headers(student),
     )
     assert resp.status_code == 409
+
+
+def test_equipment_admin_cannot_review_reports(client, db, pi, equip_admin, student):
+    from datetime import date, timedelta
+
+    monday = date.today() - timedelta(days=date.today().weekday())
+    resp = client.post(
+        "/api/v1/weekly-reports",
+        json={"week_start": monday.isoformat(), "work_summary": "s"},
+        headers=auth_headers(student),
+    )
+    assert resp.status_code == 201
+    report_id = resp.json()["data"]["id"]
+    client.post(
+        f"/api/v1/weekly-reports/{report_id}/submit", headers=auth_headers(student)
+    )
+    resp = client.post(
+        f"/api/v1/weekly-reports/{report_id}/review",
+        json={"comment": "x"},
+        headers=auth_headers(equip_admin),
+    )
+    assert resp.status_code == 403

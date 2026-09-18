@@ -1,4 +1,4 @@
-"""Daily due-date checker (PRD §10): run via `python -m app.due_checker`.
+"""Daily due-date checker: run via `python -m app.due_checker`.
 
 - tasks due within 3 days (not done)      -> notify assignee once per day
 - overdue tasks (not done/cancelled)      -> notify assignee once per day
@@ -10,45 +10,55 @@ within a day via notification dedupe.
 """
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import timedelta
 
 from sqlalchemy import select
 
+from app.core.time import app_today, utcnow
 from app.database import SessionLocal
-from app.models.equipment import Equipment, EquipmentBooking, EquipmentBorrow
 from app.models.enums import BookingStatus, BorrowStatus, EquipmentStatus, TaskStatus
+from app.models.equipment import Equipment, EquipmentBooking, EquipmentBorrow
 from app.models.project import Task
 from app.models.system import Notification
 
 logger = logging.getLogger("labflow.due_checker")
 
 
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
 def notified_today(db, user_id: int, type: str, related_type: str, related_id) -> bool:
     # created_at is naive UTC; dedupe window must be the current UTC day
     start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    return db.scalar(
-        select(Notification.id).where(
-            Notification.user_id == user_id,
-            Notification.type == type,
-            Notification.related_type == related_type,
-            Notification.related_id == str(related_id),
-            Notification.created_at >= start,
+    return (
+        db.scalar(
+            select(Notification.id).where(
+                Notification.user_id == user_id,
+                Notification.type == type,
+                Notification.related_type == related_type,
+                Notification.related_id == str(related_id),
+                Notification.created_at >= start,
+            )
         )
-    ) is not None
+        is not None
+    )
 
 
 def run() -> dict:
     db = SessionLocal()
-    stats = {"task_due_soon": 0, "task_overdue": 0, "borrow_overdue": 0, "booking_completed": 0}
-    today = date.today()
+    stats = {
+        "task_due_soon": 0,
+        "task_overdue": 0,
+        "borrow_overdue": 0,
+        "booking_completed": 0,
+    }
+    today = app_today()
     now = utcnow()
 
     # ---- tasks due soon / overdue ----
-    open_statuses = (TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED, TaskStatus.REVIEW)
+    open_statuses = (
+        TaskStatus.TODO,
+        TaskStatus.IN_PROGRESS,
+        TaskStatus.BLOCKED,
+        TaskStatus.REVIEW,
+    )
     due_soon = db.scalars(
         select(Task).where(
             Task.deleted_at.is_(None),
@@ -61,10 +71,16 @@ def run() -> dict:
     for t in due_soon:
         if notified_today(db, t.assignee_id, "task_due_soon", "task", t.id):
             continue
-        db.add(Notification(
-            user_id=t.assignee_id, type="task_due_soon", title="任务临近截止",
-            content=f"任务「{t.title}」将于 {t.due_date} 截止", related_type="task", related_id=str(t.id),
-        ))
+        db.add(
+            Notification(
+                user_id=t.assignee_id,
+                type="task_due_soon",
+                title="任务临近截止",
+                content=f"任务「{t.title}」将于 {t.due_date} 截止",
+                related_type="task",
+                related_id=str(t.id),
+            )
+        )
         stats["task_due_soon"] += 1
 
     overdue = db.scalars(
@@ -78,10 +94,16 @@ def run() -> dict:
     for t in overdue:
         if notified_today(db, t.assignee_id, "task_overdue", "task", t.id):
             continue
-        db.add(Notification(
-            user_id=t.assignee_id, type="task_overdue", title="任务已逾期",
-            content=f"任务「{t.title}」已逾期（截止 {t.due_date}），请尽快处理", related_type="task", related_id=str(t.id),
-        ))
+        db.add(
+            Notification(
+                user_id=t.assignee_id,
+                type="task_overdue",
+                title="任务已逾期",
+                content=f"任务「{t.title}」已逾期（截止 {t.due_date}），请尽快处理",
+                related_type="task",
+                related_id=str(t.id),
+            )
+        )
         stats["task_overdue"] += 1
 
     # ---- overdue borrows ----
@@ -91,13 +113,20 @@ def run() -> dict:
     for b in borrows:
         if b.expected_return_time and b.expected_return_time < now:
             b.status = BorrowStatus.OVERDUE
-            if not notified_today(db, b.borrower_id, "borrow_overdue", "equipment_borrow", b.id):
+            if not notified_today(
+                db, b.borrower_id, "borrow_overdue", "equipment_borrow", b.id
+            ):
                 eq = db.get(Equipment, b.equipment_id)
-                db.add(Notification(
-                    user_id=b.borrower_id, type="borrow_overdue", title="借用设备已逾期",
-                    content=f"设备「{eq.name if eq else b.equipment_id}」已超过预定归还时间，请尽快归还",
-                    related_type="equipment_borrow", related_id=str(b.id),
-                ))
+                db.add(
+                    Notification(
+                        user_id=b.borrower_id,
+                        type="borrow_overdue",
+                        title="借用设备已逾期",
+                        content=f"设备「{eq.name if eq else b.equipment_id}」已超过预定归还时间，请尽快归还",
+                        related_type="equipment_borrow",
+                        related_id=str(b.id),
+                    )
+                )
                 stats["borrow_overdue"] += 1
 
     # ---- finished approved bookings -> completed ----

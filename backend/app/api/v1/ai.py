@@ -6,15 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.deps import get_current_user, write_audit_log
 from app.core.responses import ok, paged
 from app.database import get_db
 from app.models.ai import AIConversation, AIMessage
 from app.models.user import User
+from app.services import runtime_settings
 from app.services.ai.errors import (
     AIError,
-    provider_status,
 )
 from app.services.ai.schemas import (
     AIChatRequest,
@@ -59,8 +58,19 @@ async def chat(
 
 
 @router.get("/status")
-def ai_status(user: User = Depends(get_current_user)) -> dict:
-    return ok(provider_status())
+def ai_status(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> dict:
+    cfg = runtime_settings.effective(db)
+    key = runtime_settings.get_ai_api_key(db)
+    return ok(
+        {
+            "ai_enabled": cfg.AI_ENABLED,
+            "provider": "openai_compatible" if cfg.AI_ENABLED else None,
+            "model": cfg.AI_MODEL or None,
+            "api_key": "configured" if key else "not_configured",
+        }
+    )
 
 
 @router.post("/retrieve")
@@ -71,10 +81,11 @@ def retrieve_debug(
 ) -> dict:
     """Retrieval-only debug endpoint: no LLM call.
 
-    Development: open to authenticated users. Production: PI only and only
-    when AI_DEBUG_RETRIEVAL=true.
+    Development: open to authenticated users; otherwise PI only, and only
+    when the runtime AI_DEBUG_RETRIEVAL flag is on.
     """
-    allowed = settings.effective_ai_debug_retrieval or user.role == "PI"
+    cfg = runtime_settings.effective(db)
+    allowed = cfg.AI_DEBUG_RETRIEVAL or user.role == "PI"
     if not allowed:
         raise HTTPException(status_code=403, detail="检索调试接口未开放")
     started = time.perf_counter()
@@ -83,7 +94,11 @@ def retrieve_debug(
     )
     latency_ms = int((time.perf_counter() - started) * 1000)
     write_audit_log(
-        db, user, "ai_retrieve", "ai_debug", None,
+        db,
+        user,
+        "ai_retrieve",
+        "ai_debug",
+        None,
         {"retrieval_count": len(hits), "latency_ms": latency_ms},
     )
     db.commit()
@@ -125,7 +140,10 @@ def list_conversations(
         .limit(page_size)
     ).all()
     return paged(
-        [{"id": c.id, "title": c.title, "updated_at": c.updated_at.isoformat()} for c in rows],
+        [
+            {"id": c.id, "title": c.title, "updated_at": c.updated_at.isoformat()}
+            for c in rows
+        ],
         total,
         page,
         page_size,
@@ -152,7 +170,9 @@ def get_conversation(
 ) -> dict:
     conv = _own_conversation(db, user, conversation_id)
     messages = db.scalars(
-        select(AIMessage).where(AIMessage.conversation_id == conv.id).order_by(AIMessage.id)
+        select(AIMessage)
+        .where(AIMessage.conversation_id == conv.id)
+        .order_by(AIMessage.id)
     ).all()
     return ok(
         {

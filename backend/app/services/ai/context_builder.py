@@ -8,14 +8,17 @@ only contract with the model.
 """
 
 import json
-from datetime import date
 
-from app.core.config import settings
+from app.core.time import app_today
 from app.services.retrieval.types import RetrievalHit
 
 
 def _render_hit(hit: RetrievalHit) -> dict:
-    data = {k: v for k, v in (hit.metadata.get("context") or {}).items() if v not in (None, "")}
+    data = {
+        k: v
+        for k, v in (hit.metadata.get("context") or {}).items()
+        if v not in (None, "")
+    }
     return {
         "type": hit.source_type,
         "id": hit.source_id,
@@ -24,19 +27,18 @@ def _render_hit(hit: RetrievalHit) -> dict:
     }
 
 
-def build_context(hits: list[RetrievalHit]) -> str:
+def build_context(hits: list[RetrievalHit], max_chars: int, timezone_label: str) -> str:
     """Build the bounded JSON source block appended to the user message.
 
     Hits must already be permission-filtered by the retrieval engine; this
     function performs NO additional data access.
     """
     header = (
-        f"<labflow_metadata>\ncurrent_date: {date.today().isoformat()}\n"
-        f"timezone: {settings.APP_TIMEZONE}\n</labflow_metadata>"
+        f"<labflow_metadata>\ncurrent_date: {app_today().isoformat()}\n"
+        f"timezone: {timezone_label}\n</labflow_metadata>"
     )
     records: list[dict] = []
     total = len(header)
-    max_chars = settings.AI_MAX_CONTEXT_CHARS
     for hit in sorted(hits, key=lambda h: h.score, reverse=True):
         record = _render_hit(hit)
         size = len(json.dumps(record, ensure_ascii=False))

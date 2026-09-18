@@ -1,6 +1,6 @@
 """Local file storage service.
 
-All business code must go through this service (PRD §14): sanitized file
+All business code must go through this service: sanitized file
 names, extension whitelist, size limit and path-traversal protection.
 Swappable with MinIO/S3 later behind the same interface.
 """
@@ -33,14 +33,23 @@ class StorageService:
         name = _UNSAFE_CHARS.sub("_", name).strip("._")
         return name[:120] or "file"
 
-    def save_upload(self, subdir: str, upload: UploadFile) -> tuple[str, int, str]:
+    def save_upload(
+        self,
+        subdir: str,
+        upload: UploadFile,
+        *,
+        max_bytes: int | None = None,
+        allowed_extensions: list[str] | None = None,
+    ) -> tuple[str, int, str]:
         """Persist an UploadFile. Returns (rel_path, size, content_type)."""
+        max_bytes = max_bytes or settings.upload_max_bytes
+        allowed = allowed_extensions or settings.allowed_extensions
         original = upload.filename or "file"
         ext = Path(original).suffix.lower().lstrip(".")
-        if ext not in settings.allowed_extensions:
+        if ext not in allowed:
             raise HTTPException(
                 status_code=400,
-                detail=f"不支持的文件类型 .{ext}，允许：{', '.join(settings.allowed_extensions)}",
+                detail=f"不支持的文件类型 .{ext}，允许：{', '.join(allowed)}",
             )
 
         safe = self.sanitize_name(original)
@@ -49,7 +58,7 @@ class StorageService:
         dest.parent.mkdir(parents=True, exist_ok=True)
 
         size = 0
-        limit = settings.upload_max_bytes
+        limit = max_bytes
         with dest.open("wb") as out:
             while chunk := upload.file.read(1024 * 1024):
                 size += len(chunk)

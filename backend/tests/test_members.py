@@ -1,6 +1,6 @@
 """Member / skill / learning plan tests (PRD §29 permission coverage)."""
 
-from tests.conftest import auth_headers, make_user
+from tests.conftest import auth_headers
 
 # ---------- members ----------
 
@@ -17,7 +17,9 @@ def test_student_cannot_list_members(client, student):
 
 
 def test_student_can_view_own_member_detail(client, db, student):
-    resp = client.get(f"/api/v1/members/{student.member_profile.id}", headers=auth_headers(student))
+    resp = client.get(
+        f"/api/v1/members/{student.member_profile.id}", headers=auth_headers(student)
+    )
     assert resp.status_code == 200
     assert resp.json()["data"]["user"]["username"] == "student_test"
 
@@ -31,7 +33,8 @@ def test_student_cannot_view_other_member(client, db, student, student_b):
 
 def test_member_overview_self(client, db, student):
     resp = client.get(
-        f"/api/v1/members/{student.member_profile.id}/overview", headers=auth_headers(student)
+        f"/api/v1/members/{student.member_profile.id}/overview",
+        headers=auth_headers(student),
     )
     assert resp.status_code == 200
     data = resp.json()["data"]
@@ -44,7 +47,9 @@ def test_member_overview_self(client, db, student):
 
 def test_create_skill_by_pi(client, db, pi):
     resp = client.post(
-        "/api/v1/skills", json={"name": "ROS2", "category": "工程能力"}, headers=auth_headers(pi)
+        "/api/v1/skills",
+        json={"name": "ROS2", "category": "工程能力"},
+        headers=auth_headers(pi),
     )
     assert resp.status_code == 201
 
@@ -102,7 +107,11 @@ def student_b_member_id(client, db, pi):
 def test_student_creates_own_plan(client, db, student):
     resp = client.post(
         "/api/v1/learning-plans",
-        json={"member_id": student.member_profile.id, "title": "学习线性代数", "progress": 10},
+        json={
+            "member_id": student.member_profile.id,
+            "title": "学习线性代数",
+            "progress": 10,
+        },
         headers=auth_headers(student),
     )
     assert resp.status_code == 201
@@ -144,13 +153,15 @@ def test_pi_can_view_and_update_member_plan(client, db, pi, student):
     plan_id = resp.json()["data"]["id"]
 
     resp = client.get(
-        f"/api/v1/learning-plans?member_id={student.member_profile.id}", headers=auth_headers(pi)
+        f"/api/v1/learning-plans?member_id={student.member_profile.id}",
+        headers=auth_headers(pi),
     )
     assert resp.status_code == 200
     assert any(item["title"] == "PI可见计划" for item in resp.json()["data"])
 
     resp = client.patch(
-        f"/api/v1/learning-plans/{plan_id}", json={"progress": 50, "status": "in_progress"},
+        f"/api/v1/learning-plans/{plan_id}",
+        json={"progress": 50, "status": "in_progress"},
         headers=auth_headers(pi),
     )
     assert resp.status_code == 200
@@ -165,6 +176,8 @@ def test_update_plan_invalid_status(client, db, student):
     )
     plan_id = resp.json()["data"]["id"]
     resp = client.patch(
-        f"/api/v1/learning-plans/{plan_id}", json={"status": "bogus"}, headers=auth_headers(student)
+        f"/api/v1/learning-plans/{plan_id}",
+        json={"status": "bogus"},
+        headers=auth_headers(student),
     )
     assert resp.status_code == 422

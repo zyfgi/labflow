@@ -1,99 +1,54 @@
 <template>
   <el-container class="layout">
-    <el-aside width="220px" class="aside">
+    <el-aside :width="collapse ? '64px' : '220px'" class="aside">
       <div class="logo">
         <span class="logo-badge">LF</span>
-        <span class="logo-text">LabFlow</span>
+        <span v-if="!collapse" class="logo-text">LabFlow</span>
       </div>
       <el-menu
         :default-active="activeMenu"
         router
         class="menu"
-        :collapse="false"
+        :collapse="collapse"
         background-color="#1f2d3d"
         text-color="#bfcbd9"
         active-text-color="#409eff"
       >
-        <el-menu-item index="dashboard" route="/dashboard">
-          <el-icon><Odometer /></el-icon>
-          <span>Dashboard</span>
-        </el-menu-item>
-
-        <template v-if="auth.canManage">
-          <el-sub-menu index="member">
+        <template v-for="item in visibleMenu" :key="item.index">
+          <el-sub-menu v-if="item.children" :index="item.index">
             <template #title>
-              <el-icon><User /></el-icon>
-              <span>成员</span>
+              <el-icon><component :is="item.icon" /></el-icon>
+              <span>{{ item.label }}</span>
             </template>
-            <el-menu-item index="member-list" route="/members">成员列表</el-menu-item>
-            <el-menu-item index="member-plans" route="/learning-plans">学习计划</el-menu-item>
-            <el-menu-item index="member-skills" route="/skills-matrix">技能矩阵</el-menu-item>
+            <el-menu-item
+              v-for="child in item.children"
+              :key="child.index"
+              :index="child.index"
+              :route="child.route"
+            >
+              {{ child.label }}
+            </el-menu-item>
           </el-sub-menu>
-
-          <el-sub-menu index="research">
-            <template #title>
-              <el-icon><DataAnalysis /></el-icon>
-              <span>科研</span>
-            </template>
-            <el-menu-item index="projects" route="/projects">项目</el-menu-item>
-            <el-menu-item index="tasks" route="/tasks">任务</el-menu-item>
-            <el-menu-item index="experiments" route="/experiments">实验记录</el-menu-item>
-            <el-menu-item index="reports" route="/weekly-reports">周报</el-menu-item>
-          </el-sub-menu>
+          <el-menu-item v-else :index="item.index" :route="item.route">
+            <el-icon><component :is="item.icon" /></el-icon>
+            <template #title>{{ item.label }}</template>
+          </el-menu-item>
         </template>
-
-        <template v-if="auth.isStudent">
-          <el-sub-menu index="research">
-            <template #title>
-              <el-icon><DataAnalysis /></el-icon>
-              <span>科研</span>
-            </template>
-            <el-menu-item index="projects" route="/projects">项目</el-menu-item>
-            <el-menu-item index="my-tasks" route="/tasks">我的任务</el-menu-item>
-            <el-menu-item index="experiments" route="/experiments">实验记录</el-menu-item>
-            <el-menu-item index="reports" route="/weekly-reports">我的周报</el-menu-item>
-            <el-menu-item index="member-plans" route="/learning-plans">学习计划</el-menu-item>
-          </el-sub-menu>
-        </template>
-
-        <el-sub-menu index="equipment">
-          <template #title>
-            <el-icon><Monitor /></el-icon>
-            <span>设备</span>
-          </template>
-          <el-menu-item index="equipment" route="/equipment">设备台账</el-menu-item>
-          <el-menu-item index="bookings" route="/equipment-bookings">设备预约</el-menu-item>
-          <el-menu-item index="borrows" route="/equipment-borrows">借用记录</el-menu-item>
-          <el-menu-item index="maintenance" route="/equipment-maintenance">故障维修</el-menu-item>
-        </el-sub-menu>
-
-        <el-menu-item index="ai" route="/ai">
-          <el-icon><MagicStick /></el-icon>
-          <span>AI 助手</span>
-        </el-menu-item>
-
-        <el-menu-item index="notifications" route="/notifications">
-          <el-icon><Bell /></el-icon>
-          <span>通知</span>
-        </el-menu-item>
-
-        <el-sub-menu v-if="auth.isPI" index="system">
-          <template #title>
-            <el-icon><Setting /></el-icon>
-            <span>系统管理</span>
-          </template>
-          <el-menu-item index="system-users" route="/system/users">用户与角色</el-menu-item>
-          <el-menu-item index="system-audit" route="/system/audit-logs">操作日志</el-menu-item>
-        </el-sub-menu>
       </el-menu>
     </el-aside>
 
     <el-container>
       <el-header class="header" height="50px">
-        <el-breadcrumb separator="/">
-          <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
-          <el-breadcrumb-item v-if="route.meta.title">{{ route.meta.title }}</el-breadcrumb-item>
-        </el-breadcrumb>
+        <div class="header-left">
+          <el-icon class="collapse-btn" @click="collapse = !collapse">
+            <Expand v-if="collapse" />
+            <Fold v-else />
+          </el-icon>
+          <el-breadcrumb separator="/">
+            <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
+            <el-breadcrumb-item v-if="route.meta.title">{{ route.meta.title }}</el-breadcrumb-item>
+          </el-breadcrumb>
+        </div>
         <div class="header-right">
           <el-popover width="380" trigger="focus" :visible="searchVisible">
             <template #reference>
@@ -183,12 +138,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Bell,
   BellFilled,
   DataAnalysis,
+  Expand,
+  Fold,
   MagicStick,
   Monitor,
   Odometer,
@@ -202,22 +159,120 @@ import { globalSearch, listNotifications } from '@/api/system'
 import { ROLE_LABELS } from '@/utils/constants'
 import { formatDateTime } from '@/utils/datetime'
 
+interface MenuItem {
+  index: string
+  label: string
+  icon?: unknown
+  route?: string
+  roles?: string[]
+  children?: { index: string; label: string; route: string; roles?: string[] }[]
+}
+
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
+const collapse = ref(false)
+
+const role = computed(() => auth.user?.role ?? '')
+const visible = (item: MenuItem) => !item.roles || item.roles.includes(role.value)
+
+const menuItems: MenuItem[] = [
+  { index: 'dashboard', label: 'Dashboard', icon: Odometer, route: '/dashboard' },
+  {
+    index: 'member',
+    label: '成员',
+    icon: User,
+    roles: ['PI', 'TEACHER'],
+    children: [
+      { index: 'member-list', label: '成员列表', route: '/members' },
+      { index: 'member-plans', label: '学习计划', route: '/learning-plans' },
+      { index: 'member-skills', label: '技能矩阵', route: '/skills-matrix' },
+    ],
+  },
+  {
+    index: 'research',
+    label: '科研',
+    icon: DataAnalysis,
+    children: [
+      { index: 'projects', label: '项目', route: '/projects' },
+      { index: 'tasks', label: '任务', route: '/tasks' },
+      { index: 'experiments', label: '实验记录', route: '/experiments' },
+      { index: 'reports', label: '周报', route: '/weekly-reports' },
+      { index: 'member-plans', label: '学习计划', route: '/learning-plans', roles: ['STUDENT'] },
+    ],
+  },
+  {
+    index: 'equipment',
+    label: '设备',
+    icon: Monitor,
+    children: [
+      { index: 'equipment', label: '设备台账', route: '/equipment' },
+      { index: 'bookings', label: '设备预约', route: '/equipment-bookings' },
+      { index: 'borrows', label: '借用记录', route: '/equipment-borrows' },
+      { index: 'maintenance', label: '故障维修', route: '/equipment-maintenance' },
+    ],
+  },
+  { index: 'ai', label: 'AI 助手', icon: MagicStick, route: '/ai' },
+  { index: 'notifications', label: '通知', icon: Bell, route: '/notifications' },
+  {
+    index: 'system',
+    label: '系统管理',
+    icon: Setting,
+    roles: ['PI'],
+    children: [
+      { index: 'system-users', label: '用户与角色', route: '/system/users' },
+      { index: 'system-settings', label: '系统设置', route: '/system/settings' },
+      { index: 'system-audit', label: '操作日志', route: '/system/audit-logs' },
+    ],
+  },
+]
+
+const visibleMenu = computed(() =>
+  menuItems
+    .filter(visible)
+    .map((item) =>
+      item.children
+        ? { ...item, children: item.children.filter((c) => visible(c as MenuItem)) }
+        : item,
+    )
+    .filter((item) => !item.children || item.children.length > 0),
+)
+
 const activeMenu = computed(() => (route.meta.menu as string) ?? 'dashboard')
+
+// collapse automatically on narrow windows
+function syncCollapse() {
+  collapse.value = window.innerWidth < 1024
+}
+onMounted(() => {
+  syncCollapse()
+  window.addEventListener('resize', syncCollapse)
+})
+onBeforeUnmount(() => window.removeEventListener('resize', syncCollapse))
 
 const bellItems = ref<any[]>([])
 const bellUnread = ref(0)
+
+async function loadBell() {
+  try {
+    const { data } = await listNotifications({ page: 1, page_size: 8 })
+    bellItems.value = data.data.items
+    bellUnread.value = data.data.unread
+  } catch {
+    /* ignore */
+  }
+}
+
+function goNotifications() {
+  router.push('/notifications')
+}
 
 const searchKw = ref('')
 const searchVisible = ref(false)
 const searchResults = ref<any>(null)
 const hasAny = computed(() =>
-  searchResults.value
-    ? Object.values(searchResults.value).some((list: any) => list.length > 0)
-    : false,
+  searchResults.value ? Object.values(searchResults.value).some((list: any) => list.length > 0) : false,
 )
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -252,20 +307,6 @@ function go(path: string) {
   router.push(path)
 }
 
-async function loadBell() {
-  try {
-    const { data } = await listNotifications({ page: 1, page_size: 8 })
-    bellItems.value = data.data.items
-    bellUnread.value = data.data.unread
-  } catch {
-    /* ignore */
-  }
-}
-
-function goNotifications() {
-  router.push('/notifications')
-}
-
 async function onCommand(command: string) {
   if (command === 'profile') {
     router.push('/profile')
@@ -279,20 +320,19 @@ onMounted(loadBell)
 </script>
 
 <style scoped>
-.layout {
-  height: 100vh;
-}
-
 .aside {
   background-color: #1f2d3d;
   overflow-x: hidden;
+  transition: width 0.2s;
 }
 
 .logo {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
-  padding: 14px 20px;
+  padding: 14px 12px;
+  white-space: nowrap;
 }
 
 .logo-badge {
@@ -301,6 +341,7 @@ onMounted(loadBell)
   justify-content: center;
   width: 30px;
   height: 30px;
+  flex-shrink: 0;
   border-radius: 6px;
   background: #409eff;
   color: #fff;
@@ -324,7 +365,19 @@ onMounted(loadBell)
   align-items: center;
   justify-content: space-between;
   background: #fff;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--lf-border, #e4e7ed);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.collapse-btn {
+  cursor: pointer;
+  font-size: 18px;
+  color: #606266;
 }
 
 .header-right {
@@ -399,7 +452,7 @@ onMounted(loadBell)
 }
 
 .main {
-  padding: 16px;
+  padding: var(--lf-page-gap, 16px);
   max-width: 1600px;
   width: 100%;
   margin: 0 auto;

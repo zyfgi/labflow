@@ -5,7 +5,6 @@ import io
 from app.due_checker import run as run_due_checker
 from tests.conftest import auth_headers
 
-
 # ---------- notifications ----------
 
 
@@ -19,7 +18,11 @@ def test_notification_flow(client, db, pi, student):
     project_id = resp.json()["data"]["id"]
     client.post(
         "/api/v1/tasks",
-        json={"project_id": project_id, "title": "notify task", "assignee_id": student.id},
+        json={
+            "project_id": project_id,
+            "title": "notify task",
+            "assignee_id": student.id,
+        },
         headers=auth_headers(pi),
     )
 
@@ -31,7 +34,9 @@ def test_notification_flow(client, db, pi, student):
     assert first["is_read"] is False
 
     # mark single read
-    resp = client.post(f"/api/v1/notifications/{first['id']}/read", headers=auth_headers(student))
+    resp = client.post(
+        f"/api/v1/notifications/{first['id']}/read", headers=auth_headers(student)
+    )
     assert resp.status_code == 200
 
     # student cannot read others' notification
@@ -59,7 +64,7 @@ def test_global_search(client, db, pi, student):
     assert resp.status_code == 201
     project_id = resp.json()["data"]["id"]
     client.post(
-        f"/api/v1/experiments",
+        "/api/v1/experiments",
         json={"project_id": project_id, "title": "SEARCH-EXP-001"},
         headers=auth_headers(pi),
     )
@@ -139,14 +144,15 @@ def test_audit_logs_pi_only(client, db, pi, student):
 # ---------- due checker ----------
 
 
-def test_due_checker_marks_overdue_and_completes_bookings(client, db, pi, equip_admin, student):
+def test_due_checker_marks_overdue_and_completes_bookings(
+    client, db, pi, equip_admin, student
+):
     from datetime import datetime, timedelta
 
     from sqlalchemy import select
 
-    from app.models.equipment import Equipment, EquipmentBooking, EquipmentBorrow
-    from app.models.enums import BookingStatus, BorrowStatus
-    from app.models.project import Task
+    from app.models.enums import BorrowStatus
+    from app.models.equipment import EquipmentBorrow
     from app.models.system import Notification
 
     # overdue task
@@ -159,7 +165,12 @@ def test_due_checker_marks_overdue_and_completes_bookings(client, db, pi, equip_
     past = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
     client.post(
         "/api/v1/tasks",
-        json={"project_id": project_id, "title": "overdue task", "assignee_id": student.id, "due_date": past},
+        json={
+            "project_id": project_id,
+            "title": "overdue task",
+            "assignee_id": student.id,
+            "due_date": past,
+        },
         headers=auth_headers(pi),
     )
 
@@ -170,21 +181,38 @@ def test_due_checker_marks_overdue_and_completes_bookings(client, db, pi, equip_
         headers=auth_headers(equip_admin),
     )
     eq_id = eq_resp.json()["data"]["id"]
-    ret_time = datetime.now() - timedelta(days=1)
+    future = datetime.now() + timedelta(days=1)
     client.post(
         "/api/v1/equipment-borrows",
-        json={"equipment_id": eq_id, "expected_return_time": ret_time.strftime("%Y-%m-%dT%H:%M:%S")},
+        json={
+            "equipment_id": eq_id,
+            "expected_return_time": future.strftime("%Y-%m-%dT%H:%M:%S"),
+        },
         headers=auth_headers(student),
     )
+    # simulate the return deadline passing
+    from app.models.equipment import EquipmentBorrow
+
+    borrow_row = (
+        db.query(EquipmentBorrow).filter(EquipmentBorrow.equipment_id == eq_id).one()
+    )
+    borrow_row.expected_return_time = datetime.now() - timedelta(days=1)
+    db.commit()
 
     stats = run_due_checker()
+    # the checker commits in its own session; end our read snapshot to see it
+    db.expire_all()
     assert stats["task_overdue"] >= 1
     assert stats["borrow_overdue"] >= 1
 
-    borrow = db.scalar(select(EquipmentBorrow).where(EquipmentBorrow.equipment_id == eq_id))
+    borrow = db.scalar(
+        select(EquipmentBorrow).where(EquipmentBorrow.equipment_id == eq_id)
+    )
     assert borrow.status == BorrowStatus.OVERDUE
 
-    notes = db.scalars(select(Notification).where(Notification.user_id == student.id)).all()
+    notes = db.scalars(
+        select(Notification).where(Notification.user_id == student.id)
+    ).all()
     assert any(n.type == "task_overdue" for n in notes)
     assert any(n.type == "borrow_overdue" for n in notes)
 

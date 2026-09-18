@@ -54,7 +54,12 @@ class ReportStatus:
     RETURNED = "returned"
 
 
-REPORT_STATUSES = [ReportStatus.DRAFT, ReportStatus.SUBMITTED, ReportStatus.REVIEWED, ReportStatus.RETURNED]
+REPORT_STATUSES = [
+    ReportStatus.DRAFT,
+    ReportStatus.SUBMITTED,
+    ReportStatus.REVIEWED,
+    ReportStatus.RETURNED,
+]
 
 
 class ProjectStatus:
@@ -130,7 +135,6 @@ EXPERIMENT_STATUSES = [
     ExperimentStatus.FAILED,
     ExperimentStatus.ARCHIVED,
 ]
-
 
 
 class EquipmentStatus:

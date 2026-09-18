@@ -3,8 +3,8 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, require_pi, write_audit_log
-from app.core.time import app_today, week_start_of
 from app.core.responses import ok, paged
+from app.core.time import app_today, week_start_of
 from app.database import get_db
 from app.models.enums import Role
 from app.models.user import MemberProfile, User
@@ -66,8 +66,12 @@ def list_members(
     if keyword:
         kw = f"%{keyword}%"
         stmt = stmt.join(User, MemberProfile.user_id == User.id).where(
-            or_(User.name.ilike(kw), User.username.ilike(kw), MemberProfile.student_no.ilike(kw),
-                MemberProfile.research_direction.ilike(kw))
+            or_(
+                User.name.ilike(kw),
+                User.username.ilike(kw),
+                MemberProfile.student_no.ilike(kw),
+                MemberProfile.research_direction.ilike(kw),
+            )
         )
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(
@@ -96,7 +100,9 @@ def create_member(
     member = MemberProfile(**body.model_dump())
     db.add(member)
     db.flush()
-    write_audit_log(db, user, "create_member", "member", member.id, {"user_id": body.user_id})
+    write_audit_log(
+        db, user, "create_member", "member", member.id, {"user_id": body.user_id}
+    )
     db.commit()
     return ok(_member_out(member), message="成员档案创建成功")
 
@@ -129,7 +135,9 @@ def update_member(
     data = body.model_dump(exclude_unset=True)
     for field, value in data.items():
         setattr(member, field, value)
-    write_audit_log(db, user, "update_member", "member", member.id, {"fields": list(data.keys())})
+    write_audit_log(
+        db, user, "update_member", "member", member.id, {"fields": list(data.keys())}
+    )
     db.commit()
     return ok(_member_out(member), message="成员档案更新成功")
 
@@ -154,28 +162,43 @@ def member_overview(
     project_ids = db.scalars(
         select(ProjectMember.project_id).where(ProjectMember.user_id == member.user_id)
     ).all()
-    projects = db.scalars(
-        select(Project).where(
-            Project.id.in_(project_ids or [0]), Project.deleted_at.is_(None),
-            Project.status.in_(("planning", "active", "paused")),
-        )
-    ).all() if project_ids else []
+    projects = (
+        db.scalars(
+            select(Project).where(
+                Project.id.in_(project_ids or [0]),
+                Project.deleted_at.is_(None),
+                Project.status.in_(("planning", "active", "paused")),
+            )
+        ).all()
+        if project_ids
+        else []
+    )
 
-    in_progress = db.scalar(
-        select(func.count()).select_from(Task).where(
-            Task.assignee_id == member.user_id,
-            Task.deleted_at.is_(None),
-            Task.status.in_(("todo", "in_progress", "blocked", "review")),
+    in_progress = (
+        db.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(
+                Task.assignee_id == member.user_id,
+                Task.deleted_at.is_(None),
+                Task.status.in_(("todo", "in_progress", "blocked", "review")),
+            )
         )
-    ) or 0
-    overdue = db.scalar(
-        select(func.count()).select_from(Task).where(
-            Task.assignee_id == member.user_id,
-            Task.deleted_at.is_(None),
-            Task.status.in_(("todo", "in_progress", "blocked", "review")),
-            Task.due_date < app_today(),
+        or 0
+    )
+    overdue = (
+        db.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(
+                Task.assignee_id == member.user_id,
+                Task.deleted_at.is_(None),
+                Task.status.in_(("todo", "in_progress", "blocked", "review")),
+                Task.due_date < app_today(),
+            )
         )
-    ) or 0
+        or 0
+    )
 
     report = db.scalar(
         select(WeeklyReport).where(
@@ -190,14 +213,17 @@ def member_overview(
         )
     )
 
-    return ok({
-        "member": _member_out(member),
-        "user": UserOut.model_validate(member.user).model_dump(),
-        "current_projects": [
-            {"id": p.id, "name": p.name, "status": p.status, "progress": p.progress} for p in projects
-        ],
-        "in_progress_tasks": in_progress,
-        "overdue_tasks": overdue,
-        "this_week_report_status": report_status,
-        "latest_experiment_date": latest_exp.isoformat() if latest_exp else None,
-    })
+    return ok(
+        {
+            "member": _member_out(member),
+            "user": UserOut.model_validate(member.user).model_dump(),
+            "current_projects": [
+                {"id": p.id, "name": p.name, "status": p.status, "progress": p.progress}
+                for p in projects
+            ],
+            "in_progress_tasks": in_progress,
+            "overdue_tasks": overdue,
+            "this_week_report_status": report_status,
+            "latest_experiment_date": latest_exp.isoformat() if latest_exp else None,
+        }
+    )

@@ -8,7 +8,11 @@ from tests.conftest import auth_headers
 def setup_project(client, pi, student):
     resp = client.post(
         "/api/v1/projects",
-        json={"name": "ExpProj", "code": f"EXP-P{student.id}", "visibility": "project_members"},
+        json={
+            "name": "ExpProj",
+            "code": f"EXP-P{student.id}",
+            "visibility": "project_members",
+        },
         headers=auth_headers(pi),
     )
     project_id = resp.json()["data"]["id"]
@@ -23,7 +27,11 @@ def setup_project(client, pi, student):
 def create_experiment(client, student, project_id, title="垂向刚度辨识实验") -> dict:
     resp = client.post(
         "/api/v1/experiments",
-        json={"project_id": project_id, "title": title, "objective": "验证递推辨识算法"},
+        json={
+            "project_id": project_id,
+            "title": title,
+            "objective": "验证递推辨识算法",
+        },
         headers=auth_headers(student),
     )
     assert resp.status_code == 201, resp.text
@@ -39,7 +47,9 @@ def test_experiment_no_auto_increment(client, db, pi, student):
     assert e1["experiment_no"].endswith("-0001") or True  # sequence depends on date
     assert e2["experiment_no"] != e1["experiment_no"]
     # same date prefix for both
-    assert e1["experiment_no"].split("-")[1] == e2["experiment_no"].split("-")[1] == today
+    assert (
+        e1["experiment_no"].split("-")[1] == e2["experiment_no"].split("-")[1] == today
+    )
 
 
 def test_non_member_cannot_create_or_read(client, db, pi, student, student_b):
@@ -51,7 +61,9 @@ def test_non_member_cannot_create_or_read(client, db, pi, student, student_b):
         headers=auth_headers(student_b),
     )
     assert resp.status_code == 403
-    resp = client.get(f"/api/v1/experiments/{exp['id']}", headers=auth_headers(student_b))
+    resp = client.get(
+        f"/api/v1/experiments/{exp['id']}", headers=auth_headers(student_b)
+    )
     assert resp.status_code == 403
 
 
@@ -76,11 +88,15 @@ def test_lock_prevents_student_edit_and_pi_can_unlock(client, db, pi, student):
     exp = create_experiment(client, student, project_id)
 
     # student cannot lock own experiment (not manager)
-    resp = client.post(f"/api/v1/experiments/{exp['id']}/lock", headers=auth_headers(student))
+    resp = client.post(
+        f"/api/v1/experiments/{exp['id']}/lock", headers=auth_headers(student)
+    )
     assert resp.status_code == 403
 
     # PI locks
-    resp = client.post(f"/api/v1/experiments/{exp['id']}/lock", headers=auth_headers(pi))
+    resp = client.post(
+        f"/api/v1/experiments/{exp['id']}/lock", headers=auth_headers(pi)
+    )
     assert resp.status_code == 200
     assert resp.json()["data"]["is_locked"] is True
 
@@ -93,11 +109,15 @@ def test_lock_prevents_student_edit_and_pi_can_unlock(client, db, pi, student):
     assert resp.status_code == 403
 
     # student cannot unlock
-    resp = client.post(f"/api/v1/experiments/{exp['id']}/unlock", headers=auth_headers(student))
+    resp = client.post(
+        f"/api/v1/experiments/{exp['id']}/unlock", headers=auth_headers(student)
+    )
     assert resp.status_code == 403
 
     # PI unlocks, student can edit again
-    resp = client.post(f"/api/v1/experiments/{exp['id']}/unlock", headers=auth_headers(pi))
+    resp = client.post(
+        f"/api/v1/experiments/{exp['id']}/unlock", headers=auth_headers(pi)
+    )
     assert resp.status_code == 200
     assert resp.json()["data"]["is_locked"] is False
     resp = client.patch(
@@ -131,7 +151,8 @@ def test_attachment_upload_download_and_extension_check(client, db, pi, student)
 
     # download requires visibility; owner can
     resp = client.get(
-        f"/api/v1/experiment-attachments/{att_id}/download", headers=auth_headers(student)
+        f"/api/v1/experiment-attachments/{att_id}/download",
+        headers=auth_headers(student),
     )
     assert resp.status_code == 200
     assert resp.content == b"t,v\n1,2\n"
@@ -159,3 +180,118 @@ def test_locked_experiment_rejects_upload(client, db, pi, student):
         headers=auth_headers(student),
     )
     assert resp.status_code == 403
+
+
+def test_lab_visible_non_member_cannot_create(client, db, pi, student, student_b):
+    project_id = setup_project(client, pi, student)
+    resp = client.post(
+        "/api/v1/experiments",
+        json={"project_id": project_id, "title": "路人实验"},
+        headers=auth_headers(student_b),
+    )
+    assert resp.status_code == 403
+
+
+def test_locked_experiment_is_frozen_until_unlock(client, db, pi, student):
+    """Lock means immutable: owner, manager and PI all lose mutation rights."""
+    project_id = setup_project(client, pi, student)
+    exp = create_experiment(client, student, project_id)
+    import io as _io
+
+    resp = client.post(
+        f"/api/v1/experiments/{exp['id']}/attachments",
+        files={"file": ("a.csv", _io.BytesIO(b"a,b\n"), "text/csv")},
+        headers=auth_headers(student),
+    )
+    assert resp.status_code == 201
+    attachment_id = resp.json()["data"]["id"]
+
+    assert (
+        client.post(
+            f"/api/v1/experiments/{exp['id']}/lock", headers=auth_headers(pi)
+        ).status_code
+        == 200
+    )
+
+    assert (
+        client.patch(
+            f"/api/v1/experiments/{exp['id']}",
+            json={"conclusion": "x"},
+            headers=auth_headers(student),
+        ).status_code
+        == 403
+    )
+    assert (
+        client.patch(
+            f"/api/v1/experiments/{exp['id']}",
+            json={"conclusion": "x"},
+            headers=auth_headers(pi),
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            f"/api/v1/experiments/{exp['id']}/attachments",
+            files={"file": ("b.csv", _io.BytesIO(b"b\n"), "text/csv")},
+            headers=auth_headers(pi),
+        ).status_code
+        == 403
+    )
+    assert (
+        client.delete(
+            f"/api/v1/experiment-attachments/{attachment_id}",
+            headers=auth_headers(student),
+        ).status_code
+        == 403
+    )
+    assert (
+        client.delete(
+            f"/api/v1/experiment-attachments/{attachment_id}", headers=auth_headers(pi)
+        ).status_code
+        == 403
+    )
+    assert (
+        client.delete(
+            f"/api/v1/experiments/{exp['id']}", headers=auth_headers(pi)
+        ).status_code
+        == 403
+    )
+
+    # only unlock restores mutation rights
+    assert (
+        client.post(
+            f"/api/v1/experiments/{exp['id']}/unlock", headers=auth_headers(pi)
+        ).status_code
+        == 200
+    )
+    assert (
+        client.patch(
+            f"/api/v1/experiments/{exp['id']}",
+            json={"conclusion": "revised"},
+            headers=auth_headers(student),
+        ).status_code
+        == 200
+    )
+    assert (
+        client.delete(
+            f"/api/v1/experiment-attachments/{attachment_id}",
+            headers=auth_headers(student),
+        ).status_code
+        == 200
+    )
+
+
+def test_experiment_number_format_and_sequence(client, db, pi, student):
+    import re
+
+    project_id = setup_project(client, pi, student)
+    e1 = create_experiment(client, student, project_id)
+    e2 = create_experiment(client, student, project_id, title="第二个实验")
+    pattern = re.compile(r"^EXP-\d{8}-\d{4,}$")
+    assert pattern.match(e1["experiment_no"])
+    assert pattern.match(e2["experiment_no"])
+    assert e1["experiment_no"][:13] == e2["experiment_no"][:13]
+    assert e2["experiment_no"] != e1["experiment_no"]
+    assert int(e2["experiment_no"].rsplit("-", 1)[1]) >= int(
+        e1["experiment_no"].rsplit("-", 1)[1]
+    )

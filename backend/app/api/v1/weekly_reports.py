@@ -5,8 +5,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, write_audit_log
-from app.core.time import utcnow
 from app.core.responses import ok, paged
+from app.core.time import utcnow
 from app.database import get_db
 from app.models.enums import REPORT_STATUSES, ReportStatus, Role
 from app.models.report import WeeklyReport
@@ -29,7 +29,9 @@ def _out(report: WeeklyReport) -> dict:
 
 def _require_own_member(user: User) -> int:
     if not user.member_profile:
-        raise HTTPException(status_code=400, detail="当前用户没有成员档案，无法提交周报")
+        raise HTTPException(
+            status_code=400, detail="当前用户没有成员档案，无法提交周报"
+        )
     return user.member_profile.id
 
 
@@ -114,11 +116,14 @@ def create_report(
     week_end = body.week_start + timedelta(days=6)
     existing = db.scalar(
         select(WeeklyReport).where(
-            WeeklyReport.member_id == member_id, WeeklyReport.week_start == body.week_start
+            WeeklyReport.member_id == member_id,
+            WeeklyReport.week_start == body.week_start,
         )
     )
     if existing:
-        raise HTTPException(status_code=409, detail="该周已有周报，每人每周只能提交一份")
+        raise HTTPException(
+            status_code=409, detail="该周已有周报，每人每周只能提交一份"
+        )
 
     report = WeeklyReport(
         member_id=member_id,
@@ -176,7 +181,9 @@ def update_report(
     if report.member_id != member_id:
         raise HTTPException(status_code=403, detail="只能修改自己的周报")
     if report.status not in (ReportStatus.DRAFT, ReportStatus.RETURNED):
-        raise HTTPException(status_code=400, detail="周报已提交，不能修改（如需修改请联系老师退回）")
+        raise HTTPException(
+            status_code=400, detail="周报已提交，不能修改（如需修改请联系老师退回）"
+        )
     data = body.model_dump(exclude_unset=True)
     for field, value in data.items():
         setattr(report, field, value)
@@ -236,7 +243,8 @@ def review_report(
             report.member.user_id,
             "report_reviewed",
             "周报已审核",
-            f"{user.name} 审核了你的 {report.week_start} 周报" + ("，查看导师意见" if body.comment else ""),
+            f"{user.name} 审核了你的 {report.week_start} 周报"
+            + ("，查看导师意见" if body.comment else ""),
             "weekly_report",
             report.id,
         )

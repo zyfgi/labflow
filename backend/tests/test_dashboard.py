@@ -31,7 +31,11 @@ def test_student_dashboard(client, db, pi, student):
     project_id = resp.json()["data"]["id"]
     client.post(
         "/api/v1/tasks",
-        json={"project_id": project_id, "title": "dash task", "assignee_id": student.id},
+        json={
+            "project_id": project_id,
+            "title": "dash task",
+            "assignee_id": student.id,
+        },
         headers=auth_headers(pi),
     )
 

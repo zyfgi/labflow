@@ -3,11 +3,11 @@
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.core.time import app_today, time_range
 from app.models.experiment import Experiment
 from app.models.project import Project
 from app.models.user import User
 from app.permissions.projects import apply_project_read_scope
-from app.core.time import app_today, time_range
 from app.services.retrieval.common import first_non_empty, truncate
 from app.services.retrieval.entity_resolver import ResolvedEntities
 from app.services.retrieval.types import RetrievalHit, RetrievalPlan
@@ -40,8 +40,10 @@ def search_experiments(
     if entities.project:
         stmt = stmt.where(Experiment.project_id == entities.project.id)
 
-    member_user_id = user.id if plan.mine_only else (
-        entities.member.user_id if entities.member else None
+    member_user_id = (
+        user.id
+        if plan.mine_only
+        else (entities.member.user_id if entities.member else None)
     )
     if member_user_id:
         stmt = stmt.where(Experiment.owner_id == member_user_id)
@@ -57,7 +59,9 @@ def search_experiments(
     if date_to:
         stmt = stmt.where(Experiment.experiment_date <= date_to)
 
-    rows = db.scalars(stmt.order_by(Experiment.experiment_date.desc().nullslast()).limit(limit * 3)).all()
+    rows = db.scalars(
+        stmt.order_by(Experiment.experiment_date.desc().nullslast()).limit(limit * 3)
+    ).all()
     if not rows:
         return []
 
@@ -93,7 +97,9 @@ def search_experiments(
             score += 2
 
         excerpt = truncate(
-            first_non_empty(e.result_summary, e.conclusion, e.problems, e.objective, e.method)
+            first_non_empty(
+                e.result_summary, e.conclusion, e.problems, e.objective, e.method
+            )
         )
         hits.append(
             RetrievalHit(
@@ -118,7 +124,9 @@ def search_experiments(
                         "conclusion": truncate(e.conclusion, 600),
                         "problems": truncate(e.problems, 400),
                         "next_step": truncate(e.next_step, 300),
-                        "experiment_date": e.experiment_date.isoformat() if e.experiment_date else None,
+                        "experiment_date": e.experiment_date.isoformat()
+                        if e.experiment_date
+                        else None,
                         "project_name": project_names.get(e.project_id),
                     },
                 },

@@ -16,7 +16,9 @@ class Skill(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    category: Mapped[str] = mapped_column(String(50), default="general", index=True, nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), default="general", index=True, nullable=False
+    )
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -26,7 +28,9 @@ class Skill(Base, TimestampMixin):
 
 class MemberSkill(Base, TimestampMixin):
     __tablename__ = "member_skills"
-    __table_args__ = (UniqueConstraint("member_id", "skill_id", name="uq_member_skill"),)
+    __table_args__ = (
+        UniqueConstraint("member_id", "skill_id", name="uq_member_skill"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     member_id: Mapped[int] = mapped_column(
@@ -51,10 +55,14 @@ class LearningPlan(Base, TimestampMixin):
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    category: Mapped[str] = mapped_column(String(50), default="general", index=True, nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), default="general", index=True, nullable=False
+    )
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
-    status: Mapped[str] = mapped_column(String(20), default="not_started", index=True, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="not_started", index=True, nullable=False
+    )
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True

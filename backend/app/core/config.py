@@ -5,7 +5,18 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # upload whitelist lives here (not in app.models) to avoid an import cycle
-ALLOWED_UPLOAD_EXTENSIONS = ["pdf", "docx", "xlsx", "csv", "png", "jpg", "jpeg", "zip", "txt", "md"]
+ALLOWED_UPLOAD_EXTENSIONS = [
+    "pdf",
+    "docx",
+    "xlsx",
+    "csv",
+    "png",
+    "jpg",
+    "jpeg",
+    "zip",
+    "txt",
+    "md",
+]
 
 _DEV_DEFAULT_SECRET = "dev-secret-change-me"
 
@@ -109,12 +120,14 @@ class Settings(BaseSettings):
             problems.append("SECRET_KEY 长度必须 >= 32 字符")
         if self.DATABASE_URL.startswith("sqlite"):
             problems.append("生产环境 DATABASE_URL 不得使用 SQLite，请使用 PostgreSQL")
-        if self.AI_ENABLED and not (self.AI_BASE_URL and self.AI_API_KEY and self.AI_MODEL):
-            problems.append("AI_ENABLED=true 时必须配置 AI_BASE_URL / AI_API_KEY / AI_MODEL")
-        if problems:
-            raise RuntimeError(
-                "生产配置校验失败：\n  - " + "\n  - ".join(problems)
+        if self.AI_ENABLED and not (
+            self.AI_BASE_URL and self.AI_API_KEY and self.AI_MODEL
+        ):
+            problems.append(
+                "AI_ENABLED=true 时必须配置 AI_BASE_URL / AI_API_KEY / AI_MODEL"
             )
+        if problems:
+            raise RuntimeError("生产配置校验失败：\n  - " + "\n  - ".join(problems))
 
 
 @lru_cache

@@ -19,6 +19,7 @@ def register_routers(app: FastAPI) -> None:
         projects,
         search,
         skills,
+        system,
         tasks,
         users,
         weekly_reports,
@@ -46,3 +47,4 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(exports.router, prefix=api_v1_prefix)
     app.include_router(audit_logs.router, prefix=api_v1_prefix)
     app.include_router(ai.router, prefix=api_v1_prefix)
+    app.include_router(system.router, prefix=api_v1_prefix)

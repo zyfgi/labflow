@@ -35,7 +35,9 @@ def _resolve_member_id(db: Session, user: User, member_id: int | None) -> int:
         return member_id
     profile = user.member_profile
     if not profile:
-        raise HTTPException(status_code=400, detail="当前用户没有成员档案，请指定 member_id")
+        raise HTTPException(
+            status_code=400, detail="当前用户没有成员档案，请指定 member_id"
+        )
     return profile.id
 
 

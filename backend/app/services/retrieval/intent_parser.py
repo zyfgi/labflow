@@ -14,7 +14,10 @@ _TIME_PATTERNS: list[tuple[str, str]] = [
     (r"本周|这一周|这个星期|这周", "this_week"),
     (r"上周|上个星期", "last_week"),
     (r"最近一周|近一周|过去一周|最近7天|近7天|7天内", "last_7_days"),
-    (r"最近三周|近三周|最近一个月|近一个月|最近30天|近30天|一个月内|最近1个月", "last_30_days"),
+    (
+        r"最近三周|近三周|最近一个月|近一个月|最近30天|近30天|一个月内|最近1个月",
+        "last_30_days",
+    ),
     (r"最近两?三个月|这个月|本月", "this_month"),
     (r"最近|近期| lately ", "last_30_days"),
 ]
@@ -22,26 +25,89 @@ _TIME_PATTERNS: list[tuple[str, str]] = [
 _INTENT_RULES: list[tuple[str, str, list[str]]] = [
     # (pattern, intent, source_types)
     (r"逾期|过期|超期|delay|overdue", "overdue_tasks", ["task"]),
-    (r"维修|维护|故障|报修|calibration|校准", "maintenance", ["equipment", "maintenance"]),
+    (
+        r"维修|维护|故障|报修|calibration|校准",
+        "maintenance",
+        ["equipment", "maintenance"],
+    ),
     (r"预约|预定|booking", "bookings", ["booking"]),
     (r"设备|仪器|传感器|工作站|采集|示波器", "equipment", ["equipment"]),
     (r"周报|周记|weekly", "weekly_reports", ["weekly_report"]),
     (r"实验|试验|结果|结论|measurement", "experiments", ["experiment"]),
     (r"学习计划|技能", "learning", ["learning_plan", "member"]),
     (r"任务|待办|todo", "tasks", ["task"]),
-    (r"进展|进度|在做什么|干了什么|做了什么|总结|怎么样|如何|overview|status", "overview",
-     ["weekly_report", "task", "experiment", "project"]),
+    (
+        r"进展|进度|在做什么|干了什么|做了什么|总结|怎么样|如何|overview|status",
+        "overview",
+        ["weekly_report", "task", "experiment", "project"],
+    ),
     (r"里程碑", "project_progress", ["project"]),
     (r"项目", "project_progress", ["project"]),
 ]
 
 _STOPWORDS = {
-    "我", "我的", "我们", "你", "请", "帮", "帮忙", "哪些", "什么", "怎么", "如何",
-    "最近", "近期", "本周", "上周", "这周", "今天", "一个月", "三周", "一周", "两",
-    "有", "哪些", "的", "了", "吗", "呢", "是", "在", "和", "与", "还有", "以及",
-    "总结", "一下", "看看", "查一下", "查询", "情况", "状态", "进展", "进度",
-    "所有", "全部", "现在", "目前", "主要", "遇到", "出现", "需要", "应该", "多少",
-    "请问", "tell", "me", "what", "how", "the", "is", "are", "my", "do", "does",
+    "我",
+    "我的",
+    "我们",
+    "你",
+    "请",
+    "帮",
+    "帮忙",
+    "哪些",
+    "什么",
+    "怎么",
+    "如何",
+    "最近",
+    "近期",
+    "本周",
+    "上周",
+    "这周",
+    "今天",
+    "一个月",
+    "三周",
+    "一周",
+    "两",
+    "有",
+    "的",
+    "了",
+    "吗",
+    "呢",
+    "是",
+    "在",
+    "和",
+    "与",
+    "还有",
+    "以及",
+    "总结",
+    "一下",
+    "看看",
+    "查一下",
+    "查询",
+    "情况",
+    "状态",
+    "进展",
+    "进度",
+    "所有",
+    "全部",
+    "现在",
+    "目前",
+    "主要",
+    "遇到",
+    "出现",
+    "需要",
+    "应该",
+    "多少",
+    "请问",
+    "tell",
+    "me",
+    "what",
+    "how",
+    "the",
+    "is",
+    "are",
+    "my",
+    "do",
+    "does",
 }
 
 _EXPERIMENT_NO_RE = re.compile(r"EXP-\d{8}-\d{3,5}", re.IGNORECASE)
@@ -80,7 +146,7 @@ def _extract_keywords(text: str) -> list[str]:
                 tokens.append(raw)
             else:
                 # long CJK runs: keep 2-grams, limited
-                tokens.extend(raw[i : i + 2] for i in range(0, min(len(raw) - 1, 8)))
+                tokens.extend(raw[i : i + 2] for i in range(min(len(raw) - 1, 8)))
         elif len(raw) >= 2:
             tokens.append(raw)
     seen: list[str] = []
@@ -95,7 +161,9 @@ def parse_query(question: str) -> RetrievalPlan:
     the question text against the database."""
     text = (question or "").strip()
     intent, sources = _detect_intent(text)
-    mine_only = bool(re.search(r"我|my", text)) and "全员" not in text and "实验室" not in text
+    mine_only = (
+        bool(re.search(r"我|my", text)) and "全员" not in text and "实验室" not in text
+    )
     if intent == "overview":
         intent = "member_progress" if mine_only else "overview"
     exp_match = _EXPERIMENT_NO_RE.search(text.upper())

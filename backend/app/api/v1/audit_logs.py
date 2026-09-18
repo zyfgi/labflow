@@ -24,7 +24,9 @@ def list_audit_logs(
         stmt = stmt.where(AuditLog.action == action)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(
-        stmt.order_by(AuditLog.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        stmt.order_by(AuditLog.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     ).all()
     items = []
     for log in rows:

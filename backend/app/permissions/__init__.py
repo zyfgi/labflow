@@ -19,7 +19,9 @@ STAFF_ROLES = TEACHING_STAFF_ROLES
 
 
 def get_member_profile(db: Session, user: User) -> MemberProfile | None:
-    return db.get(MemberProfile, user.member_profile.id) if user.member_profile else None
+    return (
+        db.get(MemberProfile, user.member_profile.id) if user.member_profile else None
+    )
 
 
 def require_member_profile(user: User) -> MemberProfile:

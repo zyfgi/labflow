@@ -43,12 +43,31 @@ SKILLS = [
 
 # skill name -> {username: level}
 MEMBER_SKILLS = {
-    "Python": {"admin": 4, "teacher01": 4, "phd01": 4, "phd02": 3, "master01": 3, "master02": 3, "master03": 2, "master04": 2, "master05": 2, "under01": 2, "under02": 1},
+    "Python": {
+        "admin": 4,
+        "teacher01": 4,
+        "phd01": 4,
+        "phd02": 3,
+        "master01": 3,
+        "master02": 3,
+        "master03": 2,
+        "master04": 2,
+        "master05": 2,
+        "under01": 2,
+        "under02": 1,
+    },
     "PyTorch": {"phd01": 3, "phd02": 3, "master02": 2, "master03": 2, "master05": 3},
     "MATLAB": {"admin": 4, "teacher01": 3, "phd01": 3, "master01": 3, "master04": 2},
     "Simulink": {"admin": 3, "teacher01": 3, "master01": 2, "master04": 2},
     "CarSim": {"admin": 3, "phd01": 3, "master01": 2, "under02": 1},
-    "车辆动力学": {"admin": 4, "teacher01": 4, "phd01": 3, "phd02": 3, "master01": 2, "master04": 2},
+    "车辆动力学": {
+        "admin": 4,
+        "teacher01": 4,
+        "phd01": 3,
+        "phd02": 3,
+        "master01": 2,
+        "master04": 2,
+    },
     "控制理论": {"admin": 4, "teacher01": 3, "phd01": 3, "master01": 2, "master05": 2},
     "数据处理": {"phd02": 3, "master03": 3, "under01": 3, "master04": 2},
     "论文写作": {"admin": 4, "teacher01": 4, "phd01": 2, "phd02": 2, "master01": 1},
@@ -57,38 +76,128 @@ MEMBER_SKILLS = {
 
 LEARNING_PLANS = {
     "phd01": [
-        ("完成轮胎垂向刚度辨识算法复现", "复现 IEEE T-IE 论文中的递推辨识算法", "理论学习", "2026-08-31", "2026-10-15", PlanStatus.IN_PROGRESS, 40),
-        ("Myhil-1.0 试验台架上手", "学习台架操作规程并完成两次标定", "实验技能", "2026-09-01", "2026-10-30", PlanStatus.IN_PROGRESS, 20),
+        (
+            "完成轮胎垂向刚度辨识算法复现",
+            "复现 IEEE T-IE 论文中的递推辨识算法",
+            "理论学习",
+            "2026-08-31",
+            "2026-10-15",
+            PlanStatus.IN_PROGRESS,
+            40,
+        ),
+        (
+            "Myhil-1.0 试验台架上手",
+            "学习台架操作规程并完成两次标定",
+            "实验技能",
+            "2026-09-01",
+            "2026-10-30",
+            PlanStatus.IN_PROGRESS,
+            20,
+        ),
     ],
     "phd02": [
-        ("UKF 与 EKF 对比实验", "在仿真环境中对比两种滤波器的收敛性", "仿真实验", "2026-09-01", "2026-10-01", PlanStatus.IN_PROGRESS, 55),
+        (
+            "UKF 与 EKF 对比实验",
+            "在仿真环境中对比两种滤波器的收敛性",
+            "仿真实验",
+            "2026-09-01",
+            "2026-10-01",
+            PlanStatus.IN_PROGRESS,
+            55,
+        ),
     ],
     "master01": [
-        ("学习 CarSim-Simulink 联合仿真", "跑通横摆稳定性控制联合仿真 demo", "仿真工具", "2026-09-05", "2026-11-01", PlanStatus.IN_PROGRESS, 30),
-        ("重读《车辆动力学及控制》第3-5章", "整理读书笔记", "理论学习", "2026-09-01", "2026-10-20", PlanStatus.IN_PROGRESS, 45),
+        (
+            "学习 CarSim-Simulink 联合仿真",
+            "跑通横摆稳定性控制联合仿真 demo",
+            "仿真工具",
+            "2026-09-05",
+            "2026-11-01",
+            PlanStatus.IN_PROGRESS,
+            30,
+        ),
+        (
+            "重读《车辆动力学及控制》第3-5章",
+            "整理读书笔记",
+            "理论学习",
+            "2026-09-01",
+            "2026-10-20",
+            PlanStatus.IN_PROGRESS,
+            45,
+        ),
     ],
     "master02": [
-        ("强化学习基础课程", "完成 Spinning Up 教程", "理论学习", "2026-08-15", "2026-09-30", PlanStatus.BLOCKED, 60),
+        (
+            "强化学习基础课程",
+            "完成 Spinning Up 教程",
+            "理论学习",
+            "2026-08-15",
+            "2026-09-30",
+            PlanStatus.BLOCKED,
+            60,
+        ),
     ],
     "master03": [
-        ("多传感器时间戳对齐方案调研", "调研 LIO 与相机时间同步方法", "文献调研", "2026-09-01", "2026-09-28", PlanStatus.COMPLETED, 100),
+        (
+            "多传感器时间戳对齐方案调研",
+            "调研 LIO 与相机时间同步方法",
+            "文献调研",
+            "2026-09-01",
+            "2026-09-28",
+            PlanStatus.COMPLETED,
+            100,
+        ),
     ],
     "master04": [
-        ("滑模观测器推导练习", "手推常见滑模观测器并仿真验证", "理论学习", "2026-09-10", "2026-11-10", PlanStatus.IN_PROGRESS, 15),
+        (
+            "滑模观测器推导练习",
+            "手推常见滑模观测器并仿真验证",
+            "理论学习",
+            "2026-09-10",
+            "2026-11-10",
+            PlanStatus.IN_PROGRESS,
+            15,
+        ),
     ],
     "master05": [
-        ("Gym 环境封装练习", "封装车辆二自由度 Gym 环境", "编程训练", "2026-09-01", "2026-10-15", PlanStatus.IN_PROGRESS, 35),
+        (
+            "Gym 环境封装练习",
+            "封装车辆二自由度 Gym 环境",
+            "编程训练",
+            "2026-09-01",
+            "2026-10-15",
+            PlanStatus.IN_PROGRESS,
+            35,
+        ),
     ],
     "under01": [
-        ("Python 数据处理入门", "numpy/pandas 基础", "编程训练", "2026-09-01", "2026-11-30", PlanStatus.IN_PROGRESS, 25),
+        (
+            "Python 数据处理入门",
+            "numpy/pandas 基础",
+            "编程训练",
+            "2026-09-01",
+            "2026-11-30",
+            PlanStatus.IN_PROGRESS,
+            25,
+        ),
     ],
     "under02": [
-        ("实车数据采集跟车学习", "跟随师兄完成两轮采集", "实验技能", "2026-09-15", "2026-12-01", PlanStatus.NOT_STARTED, 0),
+        (
+            "实车数据采集跟车学习",
+            "跟随师兄完成两轮采集",
+            "实验技能",
+            "2026-09-15",
+            "2026-12-01",
+            PlanStatus.NOT_STARTED,
+            0,
+        ),
     ],
 }
 
 
-def _get_or_create_skill(db: Session, name: str, category: str, desc: str, order: int) -> Skill:
+def _get_or_create_skill(
+    db: Session, name: str, category: str, desc: str, order: int
+) -> Skill:
     skill = db.scalar(select(Skill).where(Skill.name == name))
     if skill is None:
         skill = Skill(name=name, category=category, description=desc, sort_order=order)
@@ -161,7 +270,8 @@ def seed_domain(db: Session, users: dict) -> None:
             return
         if db.scalar(
             select(WeeklyReport).where(
-                WeeklyReport.member_id == profile.id, WeeklyReport.week_start == week_start
+                WeeklyReport.member_id == profile.id,
+                WeeklyReport.week_start == week_start,
             )
         ):
             return
@@ -174,7 +284,12 @@ def seed_domain(db: Session, users: dict) -> None:
                 week_start=week_start,
                 week_end=week_start + timedelta(days=6),
                 status=status,
-                submitted_at=fields.pop("submitted_at", datetime.combine(week_start + timedelta(days=4), datetime.min.time())),
+                submitted_at=fields.pop(
+                    "submitted_at",
+                    datetime.combine(
+                        week_start + timedelta(days=4), datetime.min.time()
+                    ),
+                ),
                 reviewer_id=reviewer.id if reviewed_at else None,
                 reviewed_at=reviewed_at,
                 review_comment=review_comment,
@@ -182,47 +297,112 @@ def seed_domain(db: Session, users: dict) -> None:
             )
         )
 
-    report("master01", this_monday, ReportStatus.SUBMITTED,
-           work_summary="完成 CarSim 联合仿真 demo 搭建", learning_summary="学习整车七自由度模型",
-           problems="转向阶跃工况发散", next_week_plan="调整轮胎模型参数", self_progress=45)
-    report("master01", last_monday, ReportStatus.REVIEWED,
-           work_summary="阅读横摆稳定性文献 5 篇", learning_summary="整理 LQR 基础",
-           next_week_plan="搭建 Simulink 模型", self_progress=35,
-           reviewer=users["admin"], review_comment="继续，注意对比不同控制增益",
-           reviewed_at=datetime.combine(last_monday + timedelta(days=6), datetime.min.time()))
-    report("phd01", this_monday, ReportStatus.SUBMITTED,
-           work_summary="完成垂向刚度辨识算法复现，误差 8%", learning_summary="递推最小二乘推导",
-           experiment_summary="Myhil 台架第一次标定", problems="采样频率不足", next_week_plan="升级采集卡驱动",
-           self_progress=60)
-    report("phd01", last_monday, ReportStatus.REVIEWED,
-           work_summary="跑通 UKF 基线", next_week_plan="复现论文算法", self_progress=50,
-           reviewer=users["admin"], review_comment="基线数据要存档到实验记录",
-           reviewed_at=datetime.combine(last_monday + timedelta(days=6), datetime.min.time()))
-    report("master02", this_monday, ReportStatus.RETURNED,
-           work_summary="看了一些资料", learning_summary="rl 入门",
-           problems="卡在环境配置", next_week_plan="继续配置环境", self_progress=20,
-           reviewer=users["admin"], review_comment="周报太笼统，请写清楚具体完成了什么、卡在哪一步",
-           reviewed_at=datetime.combine(this_monday + timedelta(days=5), datetime.min.time()))
-    report("master03", last_monday, ReportStatus.SUBMITTED,
-           work_summary="完成时间戳对齐方案调研报告", next_week_plan="实现原型", self_progress=90,
-           reviewer=users["teacher01"], review_comment="调研较全面，可以进入实现阶段",
-           reviewed_at=datetime.combine(last_monday + timedelta(days=6), datetime.min.time()))
-    report("master04", this_monday, ReportStatus.DRAFT,
-           work_summary="滑模观测器推导进行中", self_progress=15)
+    report(
+        "master01",
+        this_monday,
+        ReportStatus.SUBMITTED,
+        work_summary="完成 CarSim 联合仿真 demo 搭建",
+        learning_summary="学习整车七自由度模型",
+        problems="转向阶跃工况发散",
+        next_week_plan="调整轮胎模型参数",
+        self_progress=45,
+    )
+    report(
+        "master01",
+        last_monday,
+        ReportStatus.REVIEWED,
+        work_summary="阅读横摆稳定性文献 5 篇",
+        learning_summary="整理 LQR 基础",
+        next_week_plan="搭建 Simulink 模型",
+        self_progress=35,
+        reviewer=users["admin"],
+        review_comment="继续，注意对比不同控制增益",
+        reviewed_at=datetime.combine(
+            last_monday + timedelta(days=6), datetime.min.time()
+        ),
+    )
+    report(
+        "phd01",
+        this_monday,
+        ReportStatus.SUBMITTED,
+        work_summary="完成垂向刚度辨识算法复现，误差 8%",
+        learning_summary="递推最小二乘推导",
+        experiment_summary="Myhil 台架第一次标定",
+        problems="采样频率不足",
+        next_week_plan="升级采集卡驱动",
+        self_progress=60,
+    )
+    report(
+        "phd01",
+        last_monday,
+        ReportStatus.REVIEWED,
+        work_summary="跑通 UKF 基线",
+        next_week_plan="复现论文算法",
+        self_progress=50,
+        reviewer=users["admin"],
+        review_comment="基线数据要存档到实验记录",
+        reviewed_at=datetime.combine(
+            last_monday + timedelta(days=6), datetime.min.time()
+        ),
+    )
+    report(
+        "master02",
+        this_monday,
+        ReportStatus.RETURNED,
+        work_summary="看了一些资料",
+        learning_summary="rl 入门",
+        problems="卡在环境配置",
+        next_week_plan="继续配置环境",
+        self_progress=20,
+        reviewer=users["admin"],
+        review_comment="周报太笼统，请写清楚具体完成了什么、卡在哪一步",
+        reviewed_at=datetime.combine(
+            this_monday + timedelta(days=5), datetime.min.time()
+        ),
+    )
+    report(
+        "master03",
+        last_monday,
+        ReportStatus.SUBMITTED,
+        work_summary="完成时间戳对齐方案调研报告",
+        next_week_plan="实现原型",
+        self_progress=90,
+        reviewer=users["teacher01"],
+        review_comment="调研较全面，可以进入实现阶段",
+        reviewed_at=datetime.combine(
+            last_monday + timedelta(days=6), datetime.min.time()
+        ),
+    )
+    report(
+        "master04",
+        this_monday,
+        ReportStatus.DRAFT,
+        work_summary="滑模观测器推导进行中",
+        self_progress=15,
+    )
 
     report_count = len(db.new)
     db.flush()
     logger.info("weekly_reports: +%d", report_count)
 
     # ---- projects / milestones / tasks ----
-    from app.models.enums import MilestoneStatus  # noqa: PLC0415
+    from app.models.enums import MilestoneStatus
 
     PROJECTS = [
         {
-            "code": "LAB-P001", "name": "车辆参数在线估计", "research_direction": "车辆参数与状态在线估计",
-            "status": ProjectStatus.ACTIVE, "priority": "high", "progress": 45,
-            "owner": "admin", "description": "基于多源传感的整车参数在线辨识，重点解决垂向/侧偏刚度时变估计问题。",
-            "members": [("phd01", "researcher"), ("master04", "student"), ("under01", "student")],
+            "code": "LAB-P001",
+            "name": "车辆参数在线估计",
+            "research_direction": "车辆参数与状态在线估计",
+            "status": ProjectStatus.ACTIVE,
+            "priority": "high",
+            "progress": 45,
+            "owner": "admin",
+            "description": "基于多源传感的整车参数在线辨识，重点解决垂向/侧偏刚度时变估计问题。",
+            "members": [
+                ("phd01", "researcher"),
+                ("master04", "student"),
+                ("under01", "student"),
+            ],
             "milestones": [
                 ("完成数据采集方案", 30, MilestoneStatus.COMPLETED),
                 ("辨识算法基线跑通", -14, MilestoneStatus.IN_PROGRESS),
@@ -238,10 +418,19 @@ def seed_domain(db: Session, users: dict) -> None:
             ],
         },
         {
-            "code": "LAB-P002", "name": "轮胎力在线估计", "research_direction": "轮胎-路面摩擦估计",
-            "status": ProjectStatus.ACTIVE, "priority": "critical", "progress": 30,
-            "owner": "admin", "description": "基于扩展卡尔曼滤波的轮胎力在线估计，目标在低附着路面达到 90% 精度。",
-            "members": [("phd02", "researcher"), ("master03", "student"), ("under02", "student")],
+            "code": "LAB-P002",
+            "name": "轮胎力在线估计",
+            "research_direction": "轮胎-路面摩擦估计",
+            "status": ProjectStatus.ACTIVE,
+            "priority": "critical",
+            "progress": 30,
+            "owner": "admin",
+            "description": "基于扩展卡尔曼滤波的轮胎力在线估计，目标在低附着路面达到 90% 精度。",
+            "members": [
+                ("phd02", "researcher"),
+                ("master03", "student"),
+                ("under02", "student"),
+            ],
             "milestones": [
                 ("UKF/EKF 对比结论", -20, MilestoneStatus.COMPLETED),
                 ("低附着工况验证", 21, MilestoneStatus.PENDING),
@@ -256,19 +445,49 @@ def seed_domain(db: Session, users: dict) -> None:
             ],
         },
         {
-            "code": "LAB-P003", "name": "车辆横摆稳定性控制", "research_direction": "底盘控制",
-            "status": ProjectStatus.PLANNING, "priority": "medium", "progress": 15,
-            "owner": "teacher01", "description": "面向分布式驱动电动汽车的横摆稳定性 LQR 控制策略研究。",
-            "members": [("master01", "student"), ("master02", "student"), ("master05", "student")],
+            "code": "LAB-P003",
+            "name": "车辆横摆稳定性控制",
+            "research_direction": "底盘控制",
+            "status": ProjectStatus.PLANNING,
+            "priority": "medium",
+            "progress": 15,
+            "owner": "teacher01",
+            "description": "面向分布式驱动电动汽车的横摆稳定性 LQR 控制策略研究。",
+            "members": [
+                ("master01", "student"),
+                ("master02", "student"),
+                ("master05", "student"),
+            ],
             "milestones": [
                 ("联合仿真环境搭建", 7, MilestoneStatus.IN_PROGRESS),
                 ("控制策略初版", 60, MilestoneStatus.PENDING),
             ],
             "tasks": [
-                ("CarSim-Simulink 联合仿真 demo", "master01", 40, TaskStatus.IN_PROGRESS, -7, 8),
-                ("二自由度模型读书笔记", "master01", 45, TaskStatus.IN_PROGRESS, -3, 14),
+                (
+                    "CarSim-Simulink 联合仿真 demo",
+                    "master01",
+                    40,
+                    TaskStatus.IN_PROGRESS,
+                    -7,
+                    8,
+                ),
+                (
+                    "二自由度模型读书笔记",
+                    "master01",
+                    45,
+                    TaskStatus.IN_PROGRESS,
+                    -3,
+                    14,
+                ),
                 ("LQR 控制器仿真验证", "master01", 0, TaskStatus.TODO, 9, 40),
-                ("Spinning Up 教程复现", "master02", 60, TaskStatus.IN_PROGRESS, -20, 13),
+                (
+                    "Spinning Up 教程复现",
+                    "master02",
+                    60,
+                    TaskStatus.IN_PROGRESS,
+                    -20,
+                    13,
+                ),
                 ("Gym 车辆环境封装", "master05", 35, TaskStatus.IN_PROGRESS, -4, 28),
                 ("调研分布式驱动控制文献", "master02", 0, TaskStatus.TODO, 2, 35),
             ],
@@ -293,9 +512,19 @@ def seed_domain(db: Session, users: dict) -> None:
         )
         db.add(project)
         db.flush()
-        db.add(ProjectMember(project_id=project.id, user_id=users[spec["owner"]].id, project_role="owner"))
+        db.add(
+            ProjectMember(
+                project_id=project.id,
+                user_id=users[spec["owner"]].id,
+                project_role="owner",
+            )
+        )
         for username, role in spec["members"]:
-            db.add(ProjectMember(project_id=project.id, user_id=users[username].id, project_role=role))
+            db.add(
+                ProjectMember(
+                    project_id=project.id, user_id=users[username].id, project_role=role
+                )
+            )
         today = date.today()
         for title, offset_days, status in spec["milestones"]:
             db.add(
@@ -304,11 +533,17 @@ def seed_domain(db: Session, users: dict) -> None:
                     title=title,
                     due_date=today + timedelta(days=offset_days),
                     status=status,
-                    progress=100 if status == MilestoneStatus.COMPLETED else (50 if status == MilestoneStatus.IN_PROGRESS else 0),
+                    progress=100
+                    if status == MilestoneStatus.COMPLETED
+                    else (50 if status == MilestoneStatus.IN_PROGRESS else 0),
                 )
             )
-        for idx, (title, assignee, progress, status, due_offset, *_rest) in enumerate(spec["tasks"]):
-            task_due = today + timedelta(days=due_offset) if due_offset is not None else None
+        for idx, (title, assignee, progress, status, due_offset, *_rest) in enumerate(
+            spec["tasks"]
+        ):
+            task_due = (
+                today + timedelta(days=due_offset) if due_offset is not None else None
+            )
             db.add(
                 Task(
                     project_id=project.id,
@@ -320,7 +555,11 @@ def seed_domain(db: Session, users: dict) -> None:
                     status=status,
                     progress=progress,
                     due_date=task_due,
-                    completed_at=datetime.combine(today - timedelta(days=1), datetime.min.time()) if status == TaskStatus.DONE else None,
+                    completed_at=datetime.combine(
+                        today - timedelta(days=1), datetime.min.time()
+                    )
+                    if status == TaskStatus.DONE
+                    else None,
                 )
             )
     db.flush()
@@ -329,48 +568,164 @@ def seed_domain(db: Session, users: dict) -> None:
     # ---- experiments ----
 
     EXPERIMENTS = [
-        ("LAB-P001", "phd01", "垂向刚度递推辨识验证", ExperimentStatus.COMPLETED, -18,
-         "验证递推最小二乘算法对垂向刚度时变的跟踪能力", "Myhil-1.0 台架，采样 1kHz",
-         "RLS 递推辨识，遗忘因子 0.995", "激励幅值 ±5mm，扫频 0.5-8Hz",
-         "刚度跟踪误差 8.2%，收敛时间 12s", "算法可用于实车场景", "采样频率在高频段不足",
-         "升级采集卡后重测", "https://git.labflow.edu.cn/est/vk-rbc", "a1b2c3d"),
-        ("LAB-P001", "phd01", "IMU 安装误差对辨识影响", ExperimentStatus.RUNNING, -6,
-         "量化安装角误差对刚度估计的敏感度", "实车前轴，IMU 三只",
-         "蒙特卡洛注入 ±2° 安装角", "500 组蒙特卡洛样本", None, None,
-         "样本量大，脚本偶发内存溢出", "分批处理", None, None),
-        ("LAB-P001", "master04", "滑模观测器仿真初验", ExperimentStatus.DRAFT, -2,
-         "对比滑模观测器与 Luenberger 观测器", "Simulink 仿真",
-         "滑模面线性化设计", "车速 20-80km/h 扫描", None, None, None, None, None, None),
-        ("LAB-P002", "phd02", "UKF-EKF 低附着对比", ExperimentStatus.COMPLETED, -25,
-         "评估两种滤波器在 mu=0.3 路面的估计精度", "CarSim+Simulink 联合仿真",
-         "UKF: alpha=1e-3,beta=2,kappa=0", "B 类路面，车速 60km/h",
-         "UKF 峰值误差 12%，EKF 21%", "UKF 为优选方案", "强侧风工况发散",
-         "增加自适应 Q", None, "3f4e5d6"),
-        ("LAB-P002", "phd02", "轮胎力估计器重构冒烟测试", ExperimentStatus.RUNNING, -4,
-         "验证重构后代码与原算法输出一致性", "Docker 容器，Python 3.12",
-         "模块化重构 + 回归对比", "回放历史数据集 3 组", "前两组一致",
-         None, "第三组存在 0.3% 偏差", "排查单位换算", None, None),
-        ("LAB-P002", "master03", "多源时间戳对齐验证", ExperimentStatus.COMPLETED, -9,
-         "验证硬件时间戳方案的对齐精度", "数据采集系统 + IMU",
-         "PTP 硬件时间戳", "1 小时连续采集", "对齐误差 <1ms", "方案可行", None,
-         "写入技术文档", None, None),
-        ("LAB-P003", "master01", "联合仿真环境冒烟", ExperimentStatus.FAILED, -5,
-         "跑通 CarSim-Simulink 横摆控制 demo", "CarSim 2020 + MATLAB R2023a",
-         "LQR 基础增益", "双移线工况", None, None,
-         "CarSim S-Function 无法加载", "检查版本兼容性，重装接口", "重装后重试", None, None),
-        ("LAB-P003", "master05", "Gym 环境阶跃响应测试", ExperimentStatus.DRAFT, -1,
-         "验证二自由度 Gym 环境的动力学正确性", "Python 3.12 + Gymnasium",
-         "阶跃转角输入", "60 组随机初始条件", None, None, None, None, None, None),
+        (
+            "LAB-P001",
+            "phd01",
+            "垂向刚度递推辨识验证",
+            ExperimentStatus.COMPLETED,
+            -18,
+            "验证递推最小二乘算法对垂向刚度时变的跟踪能力",
+            "Myhil-1.0 台架，采样 1kHz",
+            "RLS 递推辨识，遗忘因子 0.995",
+            "激励幅值 ±5mm，扫频 0.5-8Hz",
+            "刚度跟踪误差 8.2%，收敛时间 12s",
+            "算法可用于实车场景",
+            "采样频率在高频段不足",
+            "升级采集卡后重测",
+            "https://git.labflow.edu.cn/est/vk-rbc",
+            "a1b2c3d",
+        ),
+        (
+            "LAB-P001",
+            "phd01",
+            "IMU 安装误差对辨识影响",
+            ExperimentStatus.RUNNING,
+            -6,
+            "量化安装角误差对刚度估计的敏感度",
+            "实车前轴，IMU 三只",
+            "蒙特卡洛注入 ±2° 安装角",
+            "500 组蒙特卡洛样本",
+            None,
+            None,
+            "样本量大，脚本偶发内存溢出",
+            "分批处理",
+            None,
+            None,
+        ),
+        (
+            "LAB-P001",
+            "master04",
+            "滑模观测器仿真初验",
+            ExperimentStatus.DRAFT,
+            -2,
+            "对比滑模观测器与 Luenberger 观测器",
+            "Simulink 仿真",
+            "滑模面线性化设计",
+            "车速 20-80km/h 扫描",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
+        (
+            "LAB-P002",
+            "phd02",
+            "UKF-EKF 低附着对比",
+            ExperimentStatus.COMPLETED,
+            -25,
+            "评估两种滤波器在 mu=0.3 路面的估计精度",
+            "CarSim+Simulink 联合仿真",
+            "UKF: alpha=1e-3,beta=2,kappa=0",
+            "B 类路面，车速 60km/h",
+            "UKF 峰值误差 12%，EKF 21%",
+            "UKF 为优选方案",
+            "强侧风工况发散",
+            "增加自适应 Q",
+            None,
+            "3f4e5d6",
+        ),
+        (
+            "LAB-P002",
+            "phd02",
+            "轮胎力估计器重构冒烟测试",
+            ExperimentStatus.RUNNING,
+            -4,
+            "验证重构后代码与原算法输出一致性",
+            "Docker 容器，Python 3.12",
+            "模块化重构 + 回归对比",
+            "回放历史数据集 3 组",
+            "前两组一致",
+            None,
+            "第三组存在 0.3% 偏差",
+            "排查单位换算",
+            None,
+            None,
+        ),
+        (
+            "LAB-P002",
+            "master03",
+            "多源时间戳对齐验证",
+            ExperimentStatus.COMPLETED,
+            -9,
+            "验证硬件时间戳方案的对齐精度",
+            "数据采集系统 + IMU",
+            "PTP 硬件时间戳",
+            "1 小时连续采集",
+            "对齐误差 <1ms",
+            "方案可行",
+            None,
+            "写入技术文档",
+            None,
+            None,
+        ),
+        (
+            "LAB-P003",
+            "master01",
+            "联合仿真环境冒烟",
+            ExperimentStatus.FAILED,
+            -5,
+            "跑通 CarSim-Simulink 横摆控制 demo",
+            "CarSim 2020 + MATLAB R2023a",
+            "LQR 基础增益",
+            "双移线工况",
+            None,
+            None,
+            "CarSim S-Function 无法加载",
+            "检查版本兼容性，重装接口",
+            "重装后重试",
+            None,
+            None,
+        ),
+        (
+            "LAB-P003",
+            "master05",
+            "Gym 环境阶跃响应测试",
+            ExperimentStatus.DRAFT,
+            -1,
+            "验证二自由度 Gym 环境的动力学正确性",
+            "Python 3.12 + Gymnasium",
+            "阶跃转角输入",
+            "60 组随机初始条件",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
     ]
 
     exp_created = 0
     for row in EXPERIMENTS:
         proj_code, owner, title, status, day_offset = row[:5]
-        objective, env, method, params, result, conclusion, problems, next_step, repo, commit = (
-            list(row[5:15]) + [None] * 10
-        )[:10]
+        (
+            objective,
+            env,
+            method,
+            params,
+            result,
+            conclusion,
+            problems,
+            next_step,
+            repo,
+            commit,
+        ) = (list(row[5:15]) + [None] * 10)[:10]
         proj = db.scalar(select(Project).where(Project.code == proj_code))
-        if proj is None or db.scalar(select(Experiment).where(Experiment.title == title)):
+        if proj is None or db.scalar(
+            select(Experiment).where(Experiment.title == title)
+        ):
             continue
         db.add(
             Experiment(
@@ -398,25 +753,79 @@ def seed_domain(db: Session, users: dict) -> None:
     logger.info("experiments: +%d", exp_created)
 
     # ---- equipment / bookings / borrows / maintenance ----
-    from app.models.equipment import (  # noqa: PLC0415
+    from app.models.enums import (
+        BookingStatus,
+        BorrowStatus,
+        MaintenanceStatus,
+    )
+    from app.models.equipment import (
         Equipment,
         EquipmentBooking,
         EquipmentBorrow,
         EquipmentMaintenance,
     )
-    from app.models.enums import (  # noqa: PLC0415
-        BookingStatus,
-        BorrowStatus,
-        MaintenanceStatus,
-    )
 
     EQUIPMENT = [
-        ("EQ-WS-001", "高性能工作站", "计算设备", "Dell", "Precision 7960", "available", "admin", "楼 305"),
-        ("EQ-OSC-001", "示波器", "测量仪器", "Tektronix", "MDO34", "available", "equipadmin", "实验室 A203"),
-        ("EQ-DAS-001", "数据采集系统", "测量仪器", "NI", "cDAQ-9178", "available", "equipadmin", "实验室 A203"),
-        ("EQ-IMU-001", "双 IMU 测试平台", "实验平台", "自研", "IMU-Rig v2", "in_use", "phd01", "实验室 B101"),
-        ("EQ-FTS-001", "六维力传感器", "传感器", "ATI", "Mini45", "fault", "phd02", "实车试验车"),
-        ("EQ-MTR-001", "电机控制器", "执行部件", "汇川", "IS620N", "available", "teacher01", "实验室 B101"),
+        (
+            "EQ-WS-001",
+            "高性能工作站",
+            "计算设备",
+            "Dell",
+            "Precision 7960",
+            "available",
+            "admin",
+            "楼 305",
+        ),
+        (
+            "EQ-OSC-001",
+            "示波器",
+            "测量仪器",
+            "Tektronix",
+            "MDO34",
+            "available",
+            "equipadmin",
+            "实验室 A203",
+        ),
+        (
+            "EQ-DAS-001",
+            "数据采集系统",
+            "测量仪器",
+            "NI",
+            "cDAQ-9178",
+            "available",
+            "equipadmin",
+            "实验室 A203",
+        ),
+        (
+            "EQ-IMU-001",
+            "双 IMU 测试平台",
+            "实验平台",
+            "自研",
+            "IMU-Rig v2",
+            "in_use",
+            "phd01",
+            "实验室 B101",
+        ),
+        (
+            "EQ-FTS-001",
+            "六维力传感器",
+            "传感器",
+            "ATI",
+            "Mini45",
+            "fault",
+            "phd02",
+            "实车试验车",
+        ),
+        (
+            "EQ-MTR-001",
+            "电机控制器",
+            "执行部件",
+            "汇川",
+            "IS620N",
+            "available",
+            "teacher01",
+            "实验室 B101",
+        ),
     ]
     for asset_no, name, category, maker, model, status, manager, location in EQUIPMENT:
         if db.scalar(select(Equipment).where(Equipment.asset_no == asset_no)):
@@ -438,10 +847,19 @@ def seed_domain(db: Session, users: dict) -> None:
         )
     db.flush()
 
-    eq_map = {e.name: e for e in db.scalars(select(Equipment)).all() if not e.deleted_at}
+    eq_map = {
+        e.name: e for e in db.scalars(select(Equipment)).all() if not e.deleted_at
+    }
     now = datetime.combine(today, datetime.min.time())
 
-    def booking(equipment_name: str, username: str, day_offset: int, hour_start: int, hour_end: int, status: str) -> None:
+    def booking(
+        equipment_name: str,
+        username: str,
+        day_offset: int,
+        hour_start: int,
+        hour_end: int,
+        status: str,
+    ) -> None:
         eq = eq_map.get(equipment_name)
         if not eq:
             return
@@ -460,9 +878,13 @@ def seed_domain(db: Session, users: dict) -> None:
                 user_id=users[username].id,
                 start_time=start,
                 end_time=end,
-                purpose="数据采集试验" if username.startswith(("master", "phd", "under")) else "课题测试",
+                purpose="数据采集试验"
+                if username.startswith(("master", "phd", "under"))
+                else "课题测试",
                 status=status,
-                approved_by=users["equipadmin"].id if status == BookingStatus.APPROVED else None,
+                approved_by=users["equipadmin"].id
+                if status == BookingStatus.APPROVED
+                else None,
                 approved_at=now if status == BookingStatus.APPROVED else None,
             )
         )
@@ -476,13 +898,20 @@ def seed_domain(db: Session, users: dict) -> None:
     booking("电机控制器", "master01", 4, 9, 11, BookingStatus.COMPLETED)
     db.flush()
 
-    def borrow(equipment_name: str, username: str, days_ago: int, return_in_days: int, status: str) -> None:
+    def borrow(
+        equipment_name: str,
+        username: str,
+        days_ago: int,
+        return_in_days: int,
+        status: str,
+    ) -> None:
         eq = eq_map.get(equipment_name)
         if not eq:
             return
         if db.scalar(
             select(EquipmentBorrow).where(
-                EquipmentBorrow.equipment_id == eq.id, EquipmentBorrow.borrow_time == now - timedelta(days=days_ago)
+                EquipmentBorrow.equipment_id == eq.id,
+                EquipmentBorrow.borrow_time == now - timedelta(days=days_ago),
             )
         ):
             return
@@ -494,7 +923,9 @@ def seed_domain(db: Session, users: dict) -> None:
                 borrower_id=users[username].id,
                 borrow_time=borrow_time,
                 expected_return_time=expected,
-                actual_return_time=borrow_time + timedelta(days=return_in_days - 1) if status == BorrowStatus.RETURNED else None,
+                actual_return_time=borrow_time + timedelta(days=return_in_days - 1)
+                if status == BorrowStatus.RETURNED
+                else None,
                 purpose="实车数据采集",
                 status=status,
             )
@@ -505,14 +936,22 @@ def seed_domain(db: Session, users: dict) -> None:
     borrow("示波器", "under01", 6, 2, BorrowStatus.OVERDUE)
     db.flush()
 
-    def maintenance(equipment_name: str, reporter: str, mtype: str, status: str, desc: str, days_ago: int) -> None:
+    def maintenance(
+        equipment_name: str,
+        reporter: str,
+        mtype: str,
+        status: str,
+        desc: str,
+        days_ago: int,
+    ) -> None:
         eq = eq_map.get(equipment_name)
         if not eq:
             return
         reported = now - timedelta(days=days_ago)
         if db.scalar(
             select(EquipmentMaintenance).where(
-                EquipmentMaintenance.equipment_id == eq.id, EquipmentMaintenance.reported_at == reported
+                EquipmentMaintenance.equipment_id == eq.id,
+                EquipmentMaintenance.reported_at == reported,
             )
         ):
             return
@@ -523,17 +962,37 @@ def seed_domain(db: Session, users: dict) -> None:
                 type=mtype,
                 description=desc,
                 reported_at=reported,
-                started_at=reported + timedelta(hours=6) if status != MaintenanceStatus.REPORTED else None,
-                finished_at=reported + timedelta(days=2) if status == MaintenanceStatus.COMPLETED else None,
+                started_at=reported + timedelta(hours=6)
+                if status != MaintenanceStatus.REPORTED
+                else None,
+                finished_at=reported + timedelta(days=2)
+                if status == MaintenanceStatus.COMPLETED
+                else None,
                 status=status,
                 vendor="原厂售后" if status != MaintenanceStatus.REPORTED else None,
                 cost=None,
-                result="更换信号线后恢复正常" if status == MaintenanceStatus.COMPLETED else None,
+                result="更换信号线后恢复正常"
+                if status == MaintenanceStatus.COMPLETED
+                else None,
             )
         )
 
-    maintenance("六维力传感器", "phd02", "fault", MaintenanceStatus.PROCESSING, "六维力传感器无输出，怀疑线缆断裂", 3)
-    maintenance("示波器", "equipadmin", "calibration", MaintenanceStatus.COMPLETED, "年度校准", 30)
+    maintenance(
+        "六维力传感器",
+        "phd02",
+        "fault",
+        MaintenanceStatus.PROCESSING,
+        "六维力传感器无输出，怀疑线缆断裂",
+        3,
+    )
+    maintenance(
+        "示波器",
+        "equipadmin",
+        "calibration",
+        MaintenanceStatus.COMPLETED,
+        "年度校准",
+        30,
+    )
     db.flush()
     logger.info("equipment/booking/borrow/maintenance seeded")
 

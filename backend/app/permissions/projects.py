@@ -1,22 +1,21 @@
 """Project permissions — the SINGLE source of truth.
 
-Object-level helpers (can_read_project / can_manage_project) and query-level
-scopes (visible_project_ids_subquery / apply_project_read_scope) live here and
-only here. Search, Project/Task/Experiment lists, Export, Dashboard and AI
-Retrieval must all import from this module; duplicating these rules anywhere
-else is a bug.
+Visibility semantics (deliberately distinct tiers):
 
-Rules:
-- PI: reads/manages every non-deleted project.
-- GUEST: reads nothing project-scoped.
-- Everyone else: read = owner OR active member OR visibility = "lab"
-  (EQUIPMENT_ADMIN deliberately NOT included — they see no research data).
-- Manage = PI OR owner OR active member with role owner/manager.
-- Tasks additionally follow the product rule that the assignee can always
-  read their own tasks (expressed in SQL, never in Python loops).
+- private:         PI, owner, active member with owner/manager role
+- project_members: PI, owner, any active member
+- lab:             PI, owner, any active member, TEACHER, STUDENT
+
+EQUIPMENT_ADMIN and GUEST are denied research data up front — membership,
+ownership or assignee status never grants them access.
+
+Object-level helpers (can_read_project / can_manage_project / ...) and
+query-level scopes (visible_project_ids_subquery / apply_project_read_scope /
+visible_task_scope_conditions) live here and only here.
 """
 
-from sqlalchemy import Select, false as sa_false, select
+from sqlalchemy import Select, and_, select
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Session
 
 from app.models.enums import Role
@@ -24,14 +23,22 @@ from app.models.project import Project, ProjectMember, Task
 from app.models.user import User
 
 TEACHING_STAFF_ROLES = (Role.PI, Role.TEACHER)
-# roles that may read "visibility = lab" projects (equipment admin excluded)
+# roles allowed to browse lab-visible projects
 LAB_VISIBLE_ROLES = (Role.TEACHER, Role.STUDENT)
+# research data is flat-out denied for these roles, before any membership check
+RESEARCH_DENIED_ROLES = (Role.EQUIPMENT_ADMIN, Role.GUEST)
+_MANAGER_ROLES = ("owner", "manager")
+
+_RESEARCH_DENIED = "当前角色无权访问科研项目数据"
 
 
-# ---------- object level ----------
+def is_research_denied(user: User) -> bool:
+    return user.role in RESEARCH_DENIED_ROLES
 
 
-def is_project_member(db: Session, project_id: int, user_id: int) -> ProjectMember | None:
+def is_project_member(
+    db: Session, project_id: int, user_id: int
+) -> ProjectMember | None:
     return db.scalar(
         select(ProjectMember).where(
             ProjectMember.project_id == project_id,
@@ -44,30 +51,42 @@ def is_project_member(db: Session, project_id: int, user_id: int) -> ProjectMemb
 def can_read_project(db: Session, user: User, project: Project) -> bool:
     if project.deleted_at is not None:
         return False
-    if user.role == Role.PI:
-        return True
-    if user.role == Role.GUEST:
-        return False
-    if project.owner_id == user.id:
-        return True
-    if is_project_member(db, project.id, user.id) is not None:
-        return True
-    return project.visibility == "lab" and user.role in LAB_VISIBLE_ROLES
-
-
-def can_manage_project(db: Session, user: User, project: Project) -> bool:
-    if project.deleted_at is not None:
+    if is_research_denied(user):
         return False
     if user.role == Role.PI:
         return True
     if project.owner_id == user.id:
         return True
     membership = is_project_member(db, project.id, user.id)
-    return membership is not None and membership.project_role in ("owner", "manager")
+    is_manager = membership is not None and membership.project_role in _MANAGER_ROLES
+    if is_manager:
+        return True
+    if project.visibility == "lab":
+        if membership is not None:
+            return True
+        return user.role in LAB_VISIBLE_ROLES
+    if project.visibility == "project_members":
+        return membership is not None
+    return False  # private
+
+
+def can_manage_project(db: Session, user: User, project: Project) -> bool:
+    if project.deleted_at is not None:
+        return False
+    if is_research_denied(user):
+        return False
+    if user.role == Role.PI:
+        return True
+    if project.owner_id == user.id:
+        return True
+    membership = is_project_member(db, project.id, user.id)
+    return membership is not None and membership.project_role in _MANAGER_ROLES
 
 
 def can_create_experiment(db: Session, user: User, project: Project) -> bool:
     """Creating records requires membership — lab visibility alone is not enough."""
+    if is_research_denied(user):
+        return False
     if user.role == Role.PI:
         return True
     if project.owner_id == user.id:
@@ -75,11 +94,26 @@ def can_create_experiment(db: Session, user: User, project: Project) -> bool:
     return is_project_member(db, project.id, user.id) is not None
 
 
+def can_assign_task_to(db: Session, project: Project, assignee: User) -> bool:
+    """Assignee must be an active user allowed to participate in research,
+    and (on private/project_members projects) a project member."""
+    if assignee.role in RESEARCH_DENIED_ROLES or assignee.status != "active":
+        return False
+    if project.visibility == "lab":
+        return True
+    return is_project_member(db, project.id, assignee.id) is not None
+
+
 def ensure_project_visible(db: Session, user: User, project: Project) -> None:
     if not can_read_project(db, user, project):
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=403, detail="没有查看该项目的权限")
+        raise HTTPException(
+            status_code=403,
+            detail=_RESEARCH_DENIED
+            if is_research_denied(user)
+            else "没有查看该项目的权限",
+        )
 
 
 def ensure_project_manageable(db: Session, user: User, project: Project) -> None:
@@ -97,13 +131,22 @@ def visible_project_ids_subquery(user: User) -> Select:
     stmt = select(Project.id).where(Project.deleted_at.is_(None))
     if user.role == Role.PI:
         return stmt
-    if user.role == Role.GUEST:
+    if is_research_denied(user):
         return stmt.where(sa_false())
-    member_ids = select(ProjectMember.project_id).where(
-        ProjectMember.user_id == user.id, ProjectMember.left_at.is_(None)
+
+    member_filter = (
+        ProjectMember.user_id == user.id,
+        ProjectMember.left_at.is_(None),
     )
-    conditions = Project.owner_id == user.id
-    conditions = conditions | Project.id.in_(member_ids)
+    manager_ids = select(ProjectMember.project_id).where(
+        *member_filter, ProjectMember.project_role.in_(_MANAGER_ROLES)
+    )
+    member_ids = select(ProjectMember.project_id).where(*member_filter)
+    conditions = (Project.owner_id == user.id) | Project.id.in_(manager_ids)
+    conditions = conditions | and_(
+        Project.id.in_(member_ids),
+        Project.visibility.in_(("project_members", "lab")),
+    )
     if user.role in LAB_VISIBLE_ROLES:
         conditions = conditions | (Project.visibility == "lab")
     return stmt.where(conditions)
@@ -115,7 +158,14 @@ def apply_project_read_scope(stmt: Select, user: User, project_column) -> Select
 
 
 def visible_task_scope_conditions(user: User):
-    """Conditions for readable tasks: own tasks OR tasks in readable projects."""
-    return (Task.assignee_id == user.id) | Task.project_id.in_(
-        visible_project_ids_subquery(user)
+    """Conditions for readable tasks: project readable AND project alive.
+
+    The assignee branch only applies to users allowed to hold research tasks.
+    """
+    base = Task.project_id.in_(visible_project_ids_subquery(user))
+    if is_research_denied(user):
+        return base
+    return base | (
+        (Task.assignee_id == user.id)
+        & Task.project_id.in_(select(Project.id).where(Project.deleted_at.is_(None)))
     )

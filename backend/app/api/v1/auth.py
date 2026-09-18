@@ -3,9 +3,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.deps import client_ip, get_current_user, write_audit_log
-from app.core.time import utcnow
 from app.core.responses import ok
 from app.core.security import create_access_token, hash_password, verify_password
+from app.core.time import utcnow
 from app.database import get_db
 from app.models.enums import UserStatus
 from app.models.user import User
@@ -16,13 +16,19 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", response_model=TokenOut)
 def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -> dict:
-    stmt = select(User).where((User.username == body.username) | (User.email == body.username))
+    stmt = select(User).where(
+        (User.username == body.username) | (User.email == body.username)
+    )
     user = db.scalar(stmt)
     # Generic failure message: do not reveal whether the username exists.
     if user is None or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误"
+        )
     if user.status != UserStatus.ACTIVE:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已停用，请联系管理员")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="账号已停用，请联系管理员"
+        )
 
     user.last_login_at = utcnow()
     write_audit_log(db, user, "login", "user", user.id, ip_address=client_ip(request))
@@ -59,7 +65,9 @@ def change_password(
     db: Session = Depends(get_db),
 ) -> dict:
     if not verify_password(body.old_password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="原密码不正确")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="原密码不正确"
+        )
     user.password_hash = hash_password(body.new_password)
     user.must_change_password = False
     write_audit_log(db, user, "change_password", "user", user.id)

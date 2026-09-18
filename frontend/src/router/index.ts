@@ -131,6 +131,12 @@ const router = createRouter({
           meta: { title: '周报', menu: 'reports' },
         },
         {
+          path: 'system/settings',
+          name: 'system-settings',
+          component: () => import('@/views/system/SettingsView.vue'),
+          meta: { title: '系统设置', menu: 'system-settings', roles: ['PI'] },
+        },
+        {
           path: 'system/users',
           name: 'system-users',
           component: () => import('@/views/system/UsersView.vue'),

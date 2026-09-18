@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -24,13 +23,18 @@ def list_notifications(
     if unread_only:
         stmt = stmt.where(Notification.is_read.is_(False))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    unread = db.scalar(
-        select(func.count()).select_from(Notification).where(
-            Notification.user_id == user.id, Notification.is_read.is_(False)
+    unread = (
+        db.scalar(
+            select(func.count())
+            .select_from(Notification)
+            .where(Notification.user_id == user.id, Notification.is_read.is_(False))
         )
-    ) or 0
+        or 0
+    )
     rows = db.scalars(
-        stmt.order_by(Notification.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        stmt.order_by(Notification.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     ).all()
     items = [
         {

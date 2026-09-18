@@ -1,4 +1,4 @@
-"""LLM provider abstraction (Phase 4).
+"""LLM provider abstraction.
 
 Vendors differ only inside adapters; business code never branches on
 provider names. The OpenAI-compatible adapter speaks the standard
@@ -41,7 +41,7 @@ class LLMProvider(Protocol):
 
 
 class OpenAICompatibleProvider:
-    """ Talks to any OpenAI-compatible /chat/completions endpoint. """
+    """Talks to any OpenAI-compatible /chat/completions endpoint."""
 
     def __init__(
         self,
@@ -61,7 +61,9 @@ class OpenAICompatibleProvider:
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/"),
             headers={"Authorization": f"Bearer {api_key}"},
-            timeout=httpx.Timeout(connect=10.0, read=timeout_total, write=30.0, pool=10.0),
+            timeout=httpx.Timeout(
+                connect=10.0, read=timeout_total, write=30.0, pool=10.0
+            ),
             transport=transport,
         )
 
@@ -98,7 +100,9 @@ class OpenAICompatibleProvider:
             content = data["choices"][0]["message"]["content"]
             usage = data.get("usage") or {}
         except Exception as e:
-            raise AIResponseInvalidError(f"provider response unparsable: {e.__class__.__name__}")
+            raise AIResponseInvalidError(
+                f"provider response unparsable: {e.__class__.__name__}"
+            )
         if not content or not str(content).strip():
             raise AIResponseInvalidError("provider returned empty content")
         return ProviderResponse(
@@ -155,15 +159,32 @@ class FakeLLMProvider:
         temperature: float = 0.2,
         max_tokens: int | None = None,
     ) -> ProviderResponse:
-        self.calls.append(_FakeCall(messages=list(messages), temperature=temperature, max_tokens=max_tokens))
+        self.calls.append(
+            _FakeCall(
+                messages=list(messages), temperature=temperature, max_tokens=max_tokens
+            )
+        )
         if self._error is not None:
             raise self._error
         text = self._responses.pop(0) if self._responses else self._response
-        return ProviderResponse(content=text, model=self.model, input_tokens=10, output_tokens=20)
+        return ProviderResponse(
+            content=text, model=self.model, input_tokens=10, output_tokens=20
+        )
 
 
-def build_provider() -> LLMProvider:
-    """Factory used by the service layer. Tests inject their own provider."""
-    if not settings.AI_ENABLED:
+def build_provider(cfg=None, api_key: str | None = None) -> LLMProvider:
+    """Factory used by the service layer. Tests inject their own provider.
+
+    With no cfg, falls back to bootstrap .env values (legacy/CLI usage)."""
+    if cfg is None:
+        if not settings.AI_ENABLED:
+            raise AIDisabledError("AI_ENABLED is false")
+        return OpenAICompatibleProvider()
+    if not cfg.AI_ENABLED:
         raise AIDisabledError("AI_ENABLED is false")
-    return OpenAICompatibleProvider()
+    return OpenAICompatibleProvider(
+        base_url=cfg.AI_BASE_URL,
+        api_key=api_key,
+        model=cfg.AI_MODEL,
+        timeout_seconds=cfg.AI_TIMEOUT_SECONDS,
+    )

@@ -19,7 +19,9 @@ class AuditLog(Base):
     resource_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     detail_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[Any] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime, default=utcnow, index=True, nullable=False
+    )
 
 
 class Notification(Base):
@@ -34,5 +36,9 @@ class Notification(Base):
     content: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     related_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     related_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    is_read: Mapped[bool] = mapped_column(Boolean, default=False, index=True, nullable=False)
-    created_at: Mapped[Any] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
+    is_read: Mapped[bool] = mapped_column(
+        Boolean, default=False, index=True, nullable=False
+    )
+    created_at: Mapped[Any] = mapped_column(
+        DateTime, default=utcnow, index=True, nullable=False
+    )

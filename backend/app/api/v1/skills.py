@@ -53,7 +53,9 @@ def get_member_skills(
     if not member:
         raise HTTPException(status_code=404, detail="成员不存在")
     ensure_can_view_member(user, member)
-    rows = db.scalars(select(MemberSkill).where(MemberSkill.member_id == member_id)).all()
+    rows = db.scalars(
+        select(MemberSkill).where(MemberSkill.member_id == member_id)
+    ).all()
     return ok([MemberSkillOut.model_validate(r).model_dump() for r in rows])
 
 
@@ -81,7 +83,9 @@ def set_member_skills(
 
     current = {
         ms.skill_id: ms
-        for ms in db.scalars(select(MemberSkill).where(MemberSkill.member_id == member_id)).all()
+        for ms in db.scalars(
+            select(MemberSkill).where(MemberSkill.member_id == member_id)
+        ).all()
     }
     seen = set()
     for item in body:
@@ -90,12 +94,26 @@ def set_member_skills(
             current[item.skill_id].level = item.level
             current[item.skill_id].note = item.note
         else:
-            db.add(MemberSkill(member_id=member_id, skill_id=item.skill_id, level=item.level, note=item.note))
+            db.add(
+                MemberSkill(
+                    member_id=member_id,
+                    skill_id=item.skill_id,
+                    level=item.level,
+                    note=item.note,
+                )
+            )
     # remove entries not present anymore
     for skill_id, ms in current.items():
         if skill_id not in seen:
             db.delete(ms)
-    write_audit_log(db, user, "update_member_skills", "member", member_id, {"count": len(body)})
+    write_audit_log(
+        db, user, "update_member_skills", "member", member_id, {"count": len(body)}
+    )
     db.commit()
-    rows = db.scalars(select(MemberSkill).where(MemberSkill.member_id == member_id)).all()
-    return ok([MemberSkillOut.model_validate(r).model_dump() for r in rows], message="技能已更新")
+    rows = db.scalars(
+        select(MemberSkill).where(MemberSkill.member_id == member_id)
+    ).all()
+    return ok(
+        [MemberSkillOut.model_validate(r).model_dump() for r in rows],
+        message="技能已更新",
+    )

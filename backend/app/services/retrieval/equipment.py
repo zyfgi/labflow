@@ -1,13 +1,11 @@
 """Equipment / maintenance / booking retrieval (visible to lab members)."""
 
-
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.time import app_today
+from app.core.time import app_today, time_range
 from app.models.equipment import Equipment, EquipmentBooking, EquipmentMaintenance
 from app.models.user import User
-from app.core.time import time_range
 from app.services.retrieval.common import truncate
 from app.services.retrieval.entity_resolver import ResolvedEntities
 from app.services.retrieval.types import RetrievalHit, RetrievalPlan
@@ -27,20 +25,33 @@ def search_equipment(
 
     keywords = [k for k in plan.keywords if k]
     if keywords and use_keywords and not entities.found:
-        fields = (Equipment.name, Equipment.asset_no, Equipment.model, Equipment.category, Equipment.location)
-        stmt = stmt.where(or_(*(or_(*(f.ilike(f"%{kw}%") for f in fields)) for kw in keywords)))
+        fields = (
+            Equipment.name,
+            Equipment.asset_no,
+            Equipment.model,
+            Equipment.category,
+            Equipment.location,
+        )
+        stmt = stmt.where(
+            or_(*(or_(*(f.ilike(f"%{kw}%") for f in fields)) for kw in keywords))
+        )
 
     rows = db.scalars(stmt.limit(limit * 2)).all()
     manager_ids = {e.manager_id for e in rows if e.manager_id}
     manager_names = dict(
-        db.execute(select(User.id, User.name).where(User.id.in_(manager_ids or [0]))).all()
+        db.execute(
+            select(User.id, User.name).where(User.id.in_(manager_ids or [0]))
+        ).all()
     )
     hits: list[RetrievalHit] = []
     today = app_today()
     for e in rows:
         score = 1.0
         for kw in keywords:
-            if kw.lower() in (e.name or "").lower() or kw.lower() in (e.asset_no or "").lower():
+            if (
+                kw.lower() in (e.name or "").lower()
+                or kw.lower() in (e.asset_no or "").lower()
+            ):
                 score += 5
             if e.model and kw.lower() in e.model.lower():
                 score += 2
@@ -100,8 +111,14 @@ def search_maintenance(
 
     keywords = [k for k in plan.keywords if k]
     if keywords and use_keywords and not entities.equipment:
-        fields = (EquipmentMaintenance.description, EquipmentMaintenance.result, EquipmentMaintenance.vendor)
-        stmt = stmt.where(or_(*(or_(*(f.ilike(f"%{kw}%") for f in fields)) for kw in keywords)))
+        fields = (
+            EquipmentMaintenance.description,
+            EquipmentMaintenance.result,
+            EquipmentMaintenance.vendor,
+        )
+        stmt = stmt.where(
+            or_(*(or_(*(f.ilike(f"%{kw}%") for f in fields)) for kw in keywords))
+        )
 
     date_from, date_to = time_range(plan.time_preset)
     if date_from:
@@ -152,8 +169,12 @@ def search_maintenance(
                         "type": m.type,
                         "description": truncate(m.description, 400),
                         "status": m.status,
-                        "reported_at": m.reported_at.isoformat() if m.reported_at else None,
-                        "finished_at": m.finished_at.isoformat() if m.finished_at else None,
+                        "reported_at": m.reported_at.isoformat()
+                        if m.reported_at
+                        else None,
+                        "finished_at": m.finished_at.isoformat()
+                        if m.finished_at
+                        else None,
                         "result": truncate(m.result, 300),
                     },
                 },
@@ -193,7 +214,9 @@ def search_bookings(
     if date_to:
         stmt = stmt.where(EquipmentBooking.start_time <= f"{date_to} 23:59:59")
 
-    rows = db.scalars(stmt.order_by(EquipmentBooking.start_time.desc()).limit(limit * 2)).all()
+    rows = db.scalars(
+        stmt.order_by(EquipmentBooking.start_time.desc()).limit(limit * 2)
+    ).all()
     equipment_map = dict(
         db.execute(
             select(Equipment.id, Equipment.name).where(

@@ -9,14 +9,14 @@ import tempfile
 from datetime import date, timedelta
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
-from fastapi.testclient import TestClient
 
+import app.database as dbmod
 import app.main as main_module
 from app.core.security import create_access_token
 from app.database import Base, get_db
-import app.database as dbmod
 from app.models.experiment import Experiment
 from app.models.project import Project, Task
 from app.models.report import WeeklyReport
@@ -27,7 +27,9 @@ from app.models.user import MemberProfile, User
 def query_env():
     tmp = tempfile.mkdtemp()
     os.environ["DATABASE_URL"] = f"sqlite:///{tmp}/qc.db"
-    eng = create_engine(f"sqlite:///{tmp}/qc.db", connect_args={"check_same_thread": False})
+    eng = create_engine(
+        f"sqlite:///{tmp}/qc.db", connect_args={"check_same_thread": False}
+    )
     Base.metadata.create_all(eng)
     TestSession = sessionmaker(bind=eng, expire_on_commit=False)
     dbmod.SessionLocal = TestSession
@@ -56,7 +58,13 @@ def _seed(s, n_tasks: int, n_projects: int = 5, n_members: int = 12):
     s.flush()
     students = []
     for i in range(n_members):
-        u = User(username=f"s{i}", name=f"学生{i}", email=f"s{i}@qc", role="STUDENT", password_hash="x")
+        u = User(
+            username=f"s{i}",
+            name=f"学生{i}",
+            email=f"s{i}@qc",
+            role="STUDENT",
+            password_hash="x",
+        )
         s.add(u)
         s.flush()
         s.add(MemberProfile(user_id=u.id, member_type="master", status="active"))
@@ -100,25 +108,19 @@ def _seed(s, n_tasks: int, n_projects: int = 5, n_members: int = 12):
 
 
 def _headers(u: User) -> dict:
-    return {"Authorization": f"Bearer {create_access_token(str(u.id), {'role': u.role})}"}
+    return {
+        "Authorization": f"Bearer {create_access_token(str(u.id), {'role': u.role})}"
+    }
 
 
-def _get(client, url, headers):
-    import app.database as dbmod
-
-    prev = None
-
-    def run():
-        return client.get(url, headers=headers)
-
-    return run
-
-
-@pytest.mark.parametrize("endpoint,role", [
-    ("/api/v1/projects?page_size=50", "student"),
-    ("/api/v1/tasks?page_size=50", "student"),
-    ("/api/v1/experiments?page_size=50", "student"),
-])
+@pytest.mark.parametrize(
+    "endpoint,role",
+    [
+        ("/api/v1/projects?page_size=50", "student"),
+        ("/api/v1/tasks?page_size=50", "student"),
+        ("/api/v1/experiments?page_size=50", "student"),
+    ],
+)
 def test_list_query_count_stable(query_env, endpoint, role):
     s, counter, client = query_env
     pi, student = _seed(s, n_tasks=5)

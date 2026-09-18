@@ -8,10 +8,10 @@ phone or progress scores ever leave this module.
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.time import time_range
 from app.models.learning import LearningPlan
 from app.models.user import MemberProfile, User
 from app.permissions import is_teaching_staff
-from app.core.time import time_range
 from app.services.retrieval.common import truncate
 from app.services.retrieval.entity_resolver import ResolvedEntities
 from app.services.retrieval.types import RetrievalHit, RetrievalPlan
@@ -28,8 +28,10 @@ def search_members(
     if not is_teaching_staff(user):
         return []  # students/equipment-admin: no member directory hits
 
-    stmt = select(MemberProfile).options(joinedload(MemberProfile.user)).where(
-        MemberProfile.status == "active"
+    stmt = (
+        select(MemberProfile)
+        .options(joinedload(MemberProfile.user))
+        .where(MemberProfile.status == "active")
     )
     if entities.member:
         stmt = stmt.where(MemberProfile.id == entities.member.id)
@@ -58,12 +60,17 @@ def search_members(
                 source_type="member",
                 source_id=m.id,
                 title=name,
-                excerpt=truncate(f"{m.member_type} · {m.research_direction or '研究方向未填写'}"),
+                excerpt=truncate(
+                    f"{m.member_type} · {m.research_direction or '研究方向未填写'}"
+                ),
                 score=score,
                 url=f"/members/{m.id}",
                 project_id=None,
                 occurred_at=None,
-                metadata={"member_type": m.member_type, "research_direction": m.research_direction},
+                metadata={
+                    "member_type": m.member_type,
+                    "research_direction": m.research_direction,
+                },
             )
         )
     hits.sort(key=lambda h: h.score, reverse=True)
@@ -96,16 +103,22 @@ def search_learning_plans(
     keywords = [k for k in plan.keywords if k]
     if keywords and not entities.member:
         fields = (LearningPlan.title, LearningPlan.description, LearningPlan.category)
-        stmt = stmt.where(or_(*(or_(*(f.ilike(f"%{kw}%") for f in fields)) for kw in keywords)))
+        stmt = stmt.where(
+            or_(*(or_(*(f.ilike(f"%{kw}%") for f in fields)) for kw in keywords))
+        )
 
     date_from, date_to = time_range(plan.time_preset)
     if date_from:
         stmt = stmt.where(LearningPlan.updated_at >= date_from)
 
-    rows = db.scalars(stmt.order_by(LearningPlan.updated_at.desc()).limit(limit * 2)).all()
+    rows = db.scalars(
+        stmt.order_by(LearningPlan.updated_at.desc()).limit(limit * 2)
+    ).all()
     member_names = {}
     member_ids = {r.member_id for r in rows}
-    for mp in db.scalars(select(MemberProfile).where(MemberProfile.id.in_(member_ids))).all():
+    for mp in db.scalars(
+        select(MemberProfile).where(MemberProfile.id.in_(member_ids))
+    ).all():
         u = db.get(User, mp.user_id) if mp else None
         member_names[mp.id] = u.name if u else None
 
@@ -122,7 +135,9 @@ def search_learning_plans(
                 source_type="learning_plan",
                 source_id=p.id,
                 title=p.title,
-                excerpt=truncate(f"状态 {p.status} · 进度 {p.progress}% · {p.description or ''}"),
+                excerpt=truncate(
+                    f"状态 {p.status} · 进度 {p.progress}% · {p.description or ''}"
+                ),
                 score=score,
                 url="/learning-plans",
                 project_id=None,

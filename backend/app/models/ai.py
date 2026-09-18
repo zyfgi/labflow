@@ -34,11 +34,15 @@ class AIMessage(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     conversation_id: Mapped[int] = mapped_column(
-        ForeignKey("ai_conversations.id", ondelete="CASCADE"), index=True, nullable=False
+        ForeignKey("ai_conversations.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    sources_json: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
+    sources_json: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, nullable=True
+    )
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, nullable=False

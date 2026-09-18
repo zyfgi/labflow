@@ -70,7 +70,15 @@ INTENTS: list[str] = [
     "learning",
 ]
 
-TIME_PRESETS: list[str] = ["today", "this_week", "last_week", "last_7_days", "last_30_days", "this_month", "all"]
+TIME_PRESETS: list[str] = [
+    "today",
+    "this_week",
+    "last_week",
+    "last_7_days",
+    "last_30_days",
+    "this_month",
+    "all",
+]
 
 
 @dataclass

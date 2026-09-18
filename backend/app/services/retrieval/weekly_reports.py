@@ -14,10 +14,10 @@ from datetime import timedelta
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.core.time import time_range
 from app.models.report import WeeklyReport
 from app.models.user import MemberProfile, User
 from app.permissions import is_teaching_staff
-from app.core.time import time_range
 from app.services.retrieval.common import truncate
 from app.services.retrieval.entity_resolver import ResolvedEntities
 from app.services.retrieval.types import RetrievalHit, RetrievalPlan
@@ -61,7 +61,9 @@ def search_weekly_reports(
 
     keywords = [k for k in plan.keywords if k]
     if keywords and use_keywords and not entities.found:
-        stmt = stmt.where(or_(*(or_(*(f.ilike(f"%{kw}%") for f in _FIELDS)) for kw in keywords)))
+        stmt = stmt.where(
+            or_(*(or_(*(f.ilike(f"%{kw}%") for f in _FIELDS)) for kw in keywords))
+        )
 
     date_from, date_to = time_range(plan.time_preset)
     if date_from:
@@ -88,17 +90,31 @@ def search_weekly_reports(
         score = 1.0
         low = lambda s: (s or "").lower()
         for kw in keywords:
-            if any(kw.lower() in low(getattr(r, c)) for c in (
-                "work_summary", "learning_summary", "experiment_summary",
-                "problems", "next_week_plan", "need_help",
-            )):
+            if any(
+                kw.lower() in low(getattr(r, c))
+                for c in (
+                    "work_summary",
+                    "learning_summary",
+                    "experiment_summary",
+                    "problems",
+                    "next_week_plan",
+                    "need_help",
+                )
+            ):
                 score += 3
         if member_id and r.member_id == member_id:
             score += 2
         week_label = f"{r.week_start.isoformat()} 周报"
         excerpt = truncate(
             " ".join(
-                filter(None, [r.work_summary, r.problems and f"问题：{r.problems}", r.next_week_plan and f"计划：{r.next_week_plan}"])
+                filter(
+                    None,
+                    [
+                        r.work_summary,
+                        r.problems and f"问题：{r.problems}",
+                        r.next_week_plan and f"计划：{r.next_week_plan}",
+                    ],
+                )
             )
         )
         hits.append(

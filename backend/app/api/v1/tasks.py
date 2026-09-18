@@ -1,16 +1,16 @@
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, write_audit_log
-from app.core.time import app_today
 from app.core.responses import ok, paged
+from app.core.time import app_today, utcnow
 from app.database import get_db
-from app.models.base import utcnow
 from app.models.project import Project, Task, TaskComment
 from app.models.user import User
 from app.permissions.projects import (
+    can_manage_project,
+    can_read_project,
     ensure_project_manageable,
     ensure_project_visible,
     visible_task_scope_conditions,
@@ -32,22 +32,69 @@ DONE_STATUSES = ("done", "cancelled")
 
 def _get_task(db: Session, task_id: int) -> Task:
     task = db.get(Task, task_id)
-    if not task or task.deleted_at is not None:
+    project = db.get(Project, task.project_id) if task else None
+    # a soft-deleted project freezes all child tasks
+    if (
+        not task
+        or task.deleted_at is not None
+        or project is None
+        or project.deleted_at is not None
+    ):
         raise HTTPException(status_code=404, detail="任务不存在")
     return task
 
 
+def _project_of(db: Session, task: Task) -> Project:
+    return db.get(Project, task.project_id)
+
+
+def _can_manage_task(db: Session, user: User, task: Task) -> bool:
+    project = _project_of(db, task)
+    return project is not None and can_manage_project(db, user, project)
+
+
+def _apply_status(task: Task, status: str, progress: int | None = None) -> None:
+    """done stamps completion; leaving done/cancelled clears it (reopen)."""
+    task.status = status
+    if progress is not None:
+        task.progress = progress
+    if status == "done":
+        task.progress = 100
+        task.completed_at = utcnow()
+    else:
+        task.completed_at = None
+
+
+def _validate_relations(db: Session, task: Task, project: Project) -> None:
+    """Cross-resource integrity: milestone/parent must belong to the same
+    project; assignee must be an active user allowed to hold research tasks
+    and (outside lab visibility) a project member."""
+    if task.milestone_id is not None:
+        from app.models.project import Milestone
+
+        milestone = db.get(Milestone, task.milestone_id)
+        if milestone is None or milestone.project_id != project.id:
+            raise HTTPException(status_code=422, detail="里程碑不属于该项目")
+    if task.parent_task_id is not None:
+        if task.parent_task_id == task.id:
+            raise HTTPException(status_code=422, detail="父任务不能是自身")
+        parent = db.get(Task, task.parent_task_id)
+        if (
+            parent is None
+            or parent.deleted_at is not None
+            or parent.project_id != project.id
+        ):
+            raise HTTPException(status_code=422, detail="父任务不属于该项目")
+    if task.assignee_id is not None:
+        from app.permissions.projects import can_assign_task_to
+
+        assignee = db.get(User, task.assignee_id)
+        if assignee is None or not can_assign_task_to(db, project, assignee):
+            raise HTTPException(status_code=422, detail="负责人不符合项目成员要求")
+
+
 def _out(task: Task) -> dict:
     return TaskOut.model_validate(task).model_dump()
-
-
-def _can_edit_task(db: Session, user: User, task: Task) -> bool:
-    from app.permissions.projects import can_manage_project
-
-    project = db.get(Project, task.project_id)
-    if project and can_manage_project(db, user, project):
-        return True
-    return user.id in (task.assignee_id, task.creator_id)
 
 
 @router.get("")
@@ -76,7 +123,6 @@ def list_tasks(
                 ensure_project_visible(db, user, proj)
         stmt = stmt.where(Task.project_id == project_id)
     else:
-        # shared permission scope: own tasks OR tasks in readable projects
         stmt = stmt.where(visible_task_scope_conditions(user))
 
     if status:
@@ -86,23 +132,30 @@ def list_tasks(
         stmt = stmt.where(Task.title.ilike(kw))
     if overdue:
         stmt = stmt.where(
-            Task.status.notin_(DONE_STATUSES), Task.due_date.is_not(None), Task.due_date < app_today()
+            Task.status.notin_(DONE_STATUSES),
+            Task.due_date.is_not(None),
+            Task.due_date < app_today(),
         )
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(
-        stmt.order_by(Task.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        stmt.order_by(Task.updated_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     ).all()
 
-    # batch maps: constant query count regardless of page size
     project_names = dict(
         db.execute(
-            select(Project.id, Project.name).where(Project.id.in_({t.project_id for t in rows} or [0]))
+            select(Project.id, Project.name).where(
+                Project.id.in_({t.project_id for t in rows} or [0])
+            )
         ).all()
     )
     assignee_ids = {t.assignee_id for t in rows if t.assignee_id}
     assignee_names = dict(
-        db.execute(select(User.id, User.name).where(User.id.in_(assignee_ids or [0]))).all()
+        db.execute(
+            select(User.id, User.name).where(User.id.in_(assignee_ids or [0]))
+        ).all()
     )
     today = app_today()
 
@@ -130,6 +183,7 @@ def create_task(
     ensure_project_manageable(db, user, project)
 
     task = Task(**body.model_dump(), creator_id=user.id)
+    _validate_relations(db, task, project)
     db.add(task)
     db.flush()
     if task.assignee_id and task.assignee_id != user.id:
@@ -154,22 +208,21 @@ def get_task(
     db: Session = Depends(get_db),
 ) -> dict:
     task = _get_task(db, task_id)
-    project = db.get(Project, task.project_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    project = _project_of(db, task)
     if user.id != task.assignee_id:
         ensure_project_visible(db, user, project)
     item = _out(task)
-    proj = project
-    item["project_name"] = proj.name
+    item["project_name"] = project.name
     if task.assignee_id:
         assignee = db.get(User, task.assignee_id)
         item["assignee_name"] = assignee.name if assignee else None
     else:
         item["assignee_name"] = None
-    item["can_edit"] = _can_edit_task(db, user, task)
+    item["can_edit"] = can_manage_project(db, user, project)
     item["is_overdue"] = bool(
-        task.due_date and task.due_date < app_today() and task.status not in DONE_STATUSES
+        task.due_date
+        and task.due_date < app_today()
+        and task.status not in DONE_STATUSES
     )
     return ok(item)
 
@@ -182,18 +235,25 @@ def update_task(
     db: Session = Depends(get_db),
 ) -> dict:
     task = _get_task(db, task_id)
-    if not _can_edit_task(db, user, task):
-        raise HTTPException(status_code=403, detail="没有修改该任务的权限")
+    project = _project_of(db, task)
+    # metadata changes are manager-only; assignees use /status and comments
+    if not can_manage_project(db, user, project):
+        raise HTTPException(status_code=403, detail="只有项目管理方可以编辑任务信息")
     data = body.model_dump(exclude_unset=True)
     old_assignee = task.assignee_id
     for field, value in data.items():
         setattr(task, field, value)
+    _validate_relations(db, task, project)
     if task.status == "done":
         if task.completed_at is None:
             task.completed_at = utcnow()
-    elif task.status == "cancelled":
+    else:
         task.completed_at = None
-    if task.assignee_id and task.assignee_id != old_assignee and task.assignee_id != user.id:
+    if (
+        task.assignee_id
+        and task.assignee_id != old_assignee
+        and task.assignee_id != user.id
+    ):
         create_notification(
             db,
             task.assignee_id,
@@ -203,7 +263,9 @@ def update_task(
             "task",
             task.id,
         )
-    write_audit_log(db, user, "update_task", "task", task.id, {"fields": list(data.keys())})
+    write_audit_log(
+        db, user, "update_task", "task", task.id, {"fields": list(data.keys())}
+    )
     db.commit()
     return ok(_out(task), message="任务已更新")
 
@@ -216,17 +278,13 @@ def update_task_status(
     db: Session = Depends(get_db),
 ) -> dict:
     task = _get_task(db, task_id)
-    if not _can_edit_task(db, user, task):
+    is_assignee = task.assignee_id == user.id
+    if not (is_assignee or _can_manage_task(db, user, task)):
         raise HTTPException(status_code=403, detail="没有更新该任务状态的权限")
-    task.status = body.status
-    if body.progress is not None:
-        task.progress = body.progress
-    if body.status == "done":
-        task.progress = 100
-        task.completed_at = utcnow()
-    elif body.status in DONE_STATUSES:
-        task.completed_at = None
-    write_audit_log(db, user, "update_task_status", "task", task.id, {"status": body.status})
+    _apply_status(task, body.status, body.progress)
+    write_audit_log(
+        db, user, "update_task_status", "task", task.id, {"status": body.status}
+    )
     db.commit()
     return ok(_out(task), message="任务状态已更新")
 
@@ -238,17 +296,12 @@ def delete_task(
     db: Session = Depends(get_db),
 ) -> dict:
     task = _get_task(db, task_id)
-    project = db.get(Project, task.project_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    project = _project_of(db, task)
     ensure_project_manageable(db, user, project)
     task.deleted_at = utcnow()
     write_audit_log(db, user, "delete_task", "task", task.id)
     db.commit()
     return ok(message="任务已删除")
-
-
-# ---------- comments / activity ----------
 
 
 @router.get("/{task_id}/comments")
@@ -258,10 +311,8 @@ def list_task_comments(
     db: Session = Depends(get_db),
 ) -> dict:
     task = _get_task(db, task_id)
-    project = db.get(Project, task.project_id)
-    if project is None or (
-        user.id != task.assignee_id and not _can_read(db, user, project)
-    ):
+    project = _project_of(db, task)
+    if user.id != task.assignee_id and not can_read_project(db, user, project):
         raise HTTPException(status_code=403, detail="没有查看该任务的权限")
     rows = db.scalars(
         select(TaskComment)
@@ -284,12 +335,6 @@ def list_task_comments(
     )
 
 
-def _can_read(db: Session, user: User, project: Project) -> bool:
-    from app.permissions.projects import can_read_project
-
-    return can_read_project(db, user, project)
-
-
 @router.post("/{task_id}/comments", status_code=201)
 def add_task_comment(
     task_id: int,
@@ -298,10 +343,8 @@ def add_task_comment(
     db: Session = Depends(get_db),
 ) -> dict:
     task = _get_task(db, task_id)
-    project = db.get(Project, task.project_id)
-    if project is None or (
-        user.id != task.assignee_id and not _can_read(db, user, project)
-    ):
+    project = _project_of(db, task)
+    if user.id != task.assignee_id and not can_read_project(db, user, project):
         raise HTTPException(status_code=403, detail="没有评论该任务的权限")
     comment = TaskComment(task_id=task_id, user_id=user.id, content=body.content)
     db.add(comment)
@@ -314,7 +357,9 @@ def add_task_comment(
             "user_id": comment.user_id,
             "user_name": user.name,
             "content": comment.content,
-            "created_at": comment.created_at.isoformat() if comment.created_at else None,
+            "created_at": comment.created_at.isoformat()
+            if comment.created_at
+            else None,
         },
         message="评论已添加",
     )

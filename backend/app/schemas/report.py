@@ -2,13 +2,15 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.base import StrictSchema
+
 
 def normalize_week_start(value: date) -> date:
     """Snap any date to the Monday of its week."""
     return date.fromordinal(value.toordinal() - value.weekday())
 
 
-class WeeklyReportCreate(BaseModel):
+class WeeklyReportCreate(StrictSchema):
     week_start: date
     work_summary: str | None = Field(default=None, max_length=5000)
     learning_summary: str | None = Field(default=None, max_length=5000)
@@ -21,7 +23,7 @@ class WeeklyReportCreate(BaseModel):
     _normalize = field_validator("week_start")(lambda v: normalize_week_start(v))
 
 
-class WeeklyReportUpdate(BaseModel):
+class WeeklyReportUpdate(StrictSchema):
     work_summary: str | None = Field(default=None, max_length=5000)
     learning_summary: str | None = Field(default=None, max_length=5000)
     experiment_summary: str | None = Field(default=None, max_length=5000)
@@ -54,7 +56,7 @@ class WeeklyReportOut(BaseModel):
     updated_at: datetime
 
 
-class ReviewActionRequest(BaseModel):
+class ReviewActionRequest(StrictSchema):
     comment: str | None = Field(default=None, max_length=5000)
 
 

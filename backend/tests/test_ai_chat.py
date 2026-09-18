@@ -2,24 +2,27 @@
 
 import pytest
 
-from app.core.config import settings
 from app.services.ai.errors import AIProviderTimeoutError
 from app.services.ai.provider import FakeLLMProvider
-from tests.conftest import auth_headers
+from tests.conftest import auth_headers, enable_ai
 
 
 @pytest.fixture()
-def ai_env(monkeypatch):
-    monkeypatch.setattr(settings, "AI_ENABLED", True)
+def ai_env(db, monkeypatch):
+    enable_ai(db)
     fake = FakeLLMProvider(response="根据检索到的任务记录，回答内容……")
-    monkeypatch.setattr("app.services.ai.service.build_provider", lambda: fake)
+    monkeypatch.setattr("app.services.ai.service.build_provider", lambda *a, **k: fake)
     return fake
 
 
 def _setup_project_with_task(client, db, pi, student):
     resp = client.post(
         "/api/v1/projects",
-        json={"name": "聊天测试项目", "code": f"CHAT-{student.id}", "visibility": "lab"},
+        json={
+            "name": "聊天测试项目",
+            "code": f"CHAT-{student.id}",
+            "visibility": "lab",
+        },
         headers=auth_headers(pi),
     )
     project_id = resp.json()["data"]["id"]
@@ -43,7 +46,9 @@ def test_chat_success_with_sources(client, db, pi, student, ai_env):
     assert data["conversation_id"] > 0
     assert data["answer"]
     assert isinstance(data["sources"], list)
-    assert any(s["type"] == "task" and s["url"] == f"/tasks/{s['id']}" for s in data["sources"])
+    assert any(
+        s["type"] == "task" and s["url"] == f"/tasks/{s['id']}" for s in data["sources"]
+    )
     assert data["usage"]["input_tokens"] is not None
     # provider received system prompt + bounded context
     chat_call = ai_env.calls[-1]
@@ -51,8 +56,7 @@ def test_chat_success_with_sources(client, db, pi, student, ai_env):
     assert "untrusted" in chat_call.messages[0]["content"].lower()
 
 
-def test_chat_disabled_returns_ai_disabled(client, db, student, monkeypatch):
-    monkeypatch.setattr(settings, "AI_ENABLED", False)
+def test_chat_disabled_returns_ai_disabled(client, db, student):
     resp = client.post(
         "/api/v1/ai/chat",
         json={"message": "你好"},
@@ -64,9 +68,9 @@ def test_chat_disabled_returns_ai_disabled(client, db, student, monkeypatch):
 
 def test_chat_provider_timeout_mapped(client, db, pi, student, monkeypatch):
     _setup_project_with_task(client, db, pi, student)
-    monkeypatch.setattr(settings, "AI_ENABLED", True)
+    enable_ai(db)
     fake = FakeLLMProvider(error=AIProviderTimeoutError("simulated"))
-    monkeypatch.setattr("app.services.ai.service.build_provider", lambda: fake)
+    monkeypatch.setattr("app.services.ai.service.build_provider", lambda *a, **k: fake)
     resp = client.post(
         "/api/v1/ai/chat",
         json={"message": "我有哪些未完成的任务？"},
@@ -124,7 +128,10 @@ def test_conversation_history_and_ownership(client, db, pi, student, student_b, 
     # multi-turn keeps the same conversation and re-retrieves each turn
     resp = client.post(
         "/api/v1/ai/chat",
-        json={"message": "那这些任务里哪个最紧急？", "conversation_id": conversation_id},
+        json={
+            "message": "那这些任务里哪个最紧急？",
+            "conversation_id": conversation_id,
+        },
         headers=auth_headers(student),
     )
     assert resp.json()["data"]["conversation_id"] == conversation_id
@@ -146,16 +153,17 @@ def test_conversation_history_and_ownership(client, db, pi, student, student_b, 
 
 
 def test_rate_limit_blocks_flood(client, db, student, monkeypatch):
-    monkeypatch.setattr(settings, "AI_ENABLED", True)
-    monkeypatch.setattr(settings, "AI_RATE_LIMIT_PER_MINUTE", 2)
+    enable_ai(db, AI_RATE_LIMIT_PER_MINUTE=2)
     from app.services.ai.rate_limit import limiter
 
     limiter._windows.pop(student.id, None)
     fake = FakeLLMProvider()
-    monkeypatch.setattr("app.services.ai.service.build_provider", lambda: fake)
+    monkeypatch.setattr("app.services.ai.service.build_provider", lambda *a, **k: fake)
     for _ in range(2):
         resp = client.post(
-            "/api/v1/ai/chat", json={"message": "最近有什么任务"}, headers=auth_headers(student)
+            "/api/v1/ai/chat",
+            json={"message": "最近有什么任务"},
+            headers=auth_headers(student),
         )
         assert resp.status_code == 200
     resp = client.post(

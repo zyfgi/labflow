@@ -4,6 +4,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import (
+    MILESTONE_STATUSES,
     PROJECT_MEMBER_ROLES,
     PROJECT_PRIORITIES,
     PROJECT_STATUSES,
@@ -11,6 +12,7 @@ from app.models.enums import (
     TASK_PRIORITIES,
     TASK_STATUSES,
 )
+from app.schemas.base import StrictSchema
 
 
 def _check(value: str | None, allowed: tuple | list, label: str) -> str | None:
@@ -19,7 +21,7 @@ def _check(value: str | None, allowed: tuple | list, label: str) -> str | None:
     return value
 
 
-class ProjectCreate(BaseModel):
+class ProjectCreate(StrictSchema):
     name: str = Field(min_length=1, max_length=200)
     code: str = Field(min_length=1, max_length=50)
     description: str | None = Field(default=None, max_length=5000)
@@ -31,12 +33,18 @@ class ProjectCreate(BaseModel):
     progress: int = Field(default=0, ge=0, le=100)
     visibility: str = "project_members"
 
-    _status_v = field_validator("status")(lambda v: _check(v, PROJECT_STATUSES, "项目状态"))
-    _prio_v = field_validator("priority")(lambda v: _check(v, PROJECT_PRIORITIES, "优先级"))
-    _vis_v = field_validator("visibility")(lambda v: _check(v, PROJECT_VISIBILITIES, "可见性"))
+    _status_v = field_validator("status")(
+        lambda v: _check(v, PROJECT_STATUSES, "项目状态")
+    )
+    _prio_v = field_validator("priority")(
+        lambda v: _check(v, PROJECT_PRIORITIES, "优先级")
+    )
+    _vis_v = field_validator("visibility")(
+        lambda v: _check(v, PROJECT_VISIBILITIES, "可见性")
+    )
 
 
-class ProjectUpdate(BaseModel):
+class ProjectUpdate(StrictSchema):
     name: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
     research_direction: str | None = Field(default=None, max_length=200)
@@ -48,9 +56,15 @@ class ProjectUpdate(BaseModel):
     progress: int | None = Field(default=None, ge=0, le=100)
     visibility: str | None = None
 
-    _status_v = field_validator("status")(lambda v: _check(v, PROJECT_STATUSES, "项目状态"))
-    _prio_v = field_validator("priority")(lambda v: _check(v, PROJECT_PRIORITIES, "优先级"))
-    _vis_v = field_validator("visibility")(lambda v: _check(v, PROJECT_VISIBILITIES, "可见性"))
+    _status_v = field_validator("status")(
+        lambda v: _check(v, PROJECT_STATUSES, "项目状态")
+    )
+    _prio_v = field_validator("priority")(
+        lambda v: _check(v, PROJECT_PRIORITIES, "优先级")
+    )
+    _vis_v = field_validator("visibility")(
+        lambda v: _check(v, PROJECT_VISIBILITIES, "可见性")
+    )
 
 
 class ProjectOut(BaseModel):
@@ -77,23 +91,33 @@ class ProjectMemberAdd(BaseModel):
     user_id: int
     project_role: str = "student"
 
-    _role_v = field_validator("project_role")(lambda v: _check(v, PROJECT_MEMBER_ROLES, "项目角色"))
+    _role_v = field_validator("project_role")(
+        lambda v: _check(v, PROJECT_MEMBER_ROLES, "项目角色")
+    )
 
 
-class MilestoneCreate(BaseModel):
+class MilestoneCreate(StrictSchema):
     title: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
     due_date: date | None = None
     status: str = "pending"
     progress: int = Field(default=0, ge=0, le=100)
 
+    _status_v = field_validator("status")(
+        lambda v: _check(v, MILESTONE_STATUSES, "里程碑状态")
+    )
 
-class MilestoneUpdate(BaseModel):
+
+class MilestoneUpdate(StrictSchema):
     title: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
     due_date: date | None = None
     status: str | None = None
     progress: int | None = Field(default=None, ge=0, le=100)
+
+    _status_v = field_validator("status")(
+        lambda v: _check(v, MILESTONE_STATUSES, "里程碑状态")
+    )
 
 
 class MilestoneOut(BaseModel):
@@ -111,7 +135,7 @@ class MilestoneOut(BaseModel):
     updated_at: datetime
 
 
-class TaskCreate(BaseModel):
+class TaskCreate(StrictSchema):
     project_id: int
     milestone_id: int | None = None
     parent_task_id: int | None = None
@@ -124,11 +148,15 @@ class TaskCreate(BaseModel):
     due_date: date | None = None
     progress: int = Field(default=0, ge=0, le=100)
 
-    _prio_v = field_validator("priority")(lambda v: _check(v, TASK_PRIORITIES, "优先级"))
-    _status_v = field_validator("status")(lambda v: _check(v, TASK_STATUSES, "任务状态"))
+    _prio_v = field_validator("priority")(
+        lambda v: _check(v, TASK_PRIORITIES, "优先级")
+    )
+    _status_v = field_validator("status")(
+        lambda v: _check(v, TASK_STATUSES, "任务状态")
+    )
 
 
-class TaskUpdate(BaseModel):
+class TaskUpdate(StrictSchema):
     milestone_id: int | None = None
     title: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
@@ -139,8 +167,12 @@ class TaskUpdate(BaseModel):
     due_date: date | None = None
     progress: int | None = Field(default=None, ge=0, le=100)
 
-    _prio_v = field_validator("priority")(lambda v: _check(v, TASK_PRIORITIES, "优先级"))
-    _status_v = field_validator("status")(lambda v: _check(v, TASK_STATUSES, "任务状态"))
+    _prio_v = field_validator("priority")(
+        lambda v: _check(v, TASK_PRIORITIES, "优先级")
+    )
+    _status_v = field_validator("status")(
+        lambda v: _check(v, TASK_STATUSES, "任务状态")
+    )
 
 
 class TaskOut(BaseModel):
@@ -164,12 +196,16 @@ class TaskOut(BaseModel):
     updated_at: datetime
 
 
-class TaskStatusRequest(BaseModel):
+class TaskStatusRequest(StrictSchema):
     status: str
     progress: int | None = Field(default=None, ge=0, le=100)
 
+    _status_v = field_validator("status")(
+        lambda v: _check(v, TASK_STATUSES, "任务状态")
+    )
 
-class TaskCommentCreate(BaseModel):
+
+class TaskCommentCreate(StrictSchema):
     content: str = Field(min_length=1, max_length=5000)
 
 

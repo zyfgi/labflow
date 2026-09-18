@@ -12,9 +12,8 @@ Required behaviour:
 
 import pytest
 
-from app.core.config import settings
 from app.services.ai.provider import FakeLLMProvider
-from tests.conftest import auth_headers
+from tests.conftest import auth_headers, enable_ai
 
 SECRET = "SECRET_PROJECT_B_TOKEN_9F83A"
 REPORT_SECRET = "WEEKLY_B_PRIVATE_CONTENT_7C21B"
@@ -36,14 +35,23 @@ def leak_setup(client, db, pi, student, student_b):
     )
     client.post(
         "/api/v1/experiments",
-        json={"project_id": project_a, "title": "公开实验一", "result_summary": "正常结果"},
+        json={
+            "project_id": project_a,
+            "title": "公开实验一",
+            "result_summary": "正常结果",
+        },
         headers=auth_headers(student),
     )
 
     # Project B: private, token embedded in project / task / experiment
     resp = client.post(
         "/api/v1/projects",
-        json={"name": "项目B机密", "code": "PB-2", "visibility": "private", "description": f"机密 {SECRET}"},
+        json={
+            "name": "项目B机密",
+            "code": "PB-2",
+            "visibility": "private",
+            "description": f"机密 {SECRET}",
+        },
         headers=auth_headers(pi),
     )
     project_b = resp.json()["data"]["id"]
@@ -54,16 +62,27 @@ def leak_setup(client, db, pi, student, student_b):
     )
     resp = client.post(
         "/api/v1/tasks",
-        json={"project_id": project_b, "title": "机密任务", "description": f"task {SECRET}"},
+        json={
+            "project_id": project_b,
+            "title": "机密任务",
+            "description": f"task {SECRET}",
+        },
         headers=auth_headers(pi),
     )
     assert resp.status_code == 201
     resp = client.post(
         "/api/v1/experiments",
-        json={"project_id": project_b, "title": "机密实验", "conclusion": f"conclusion {SECRET}"},
+        json={"project_id": project_b, "title": "机密实验"},
         headers=auth_headers(student_b),
     )
     assert resp.status_code == 201
+    experiment_id = resp.json()["data"]["id"]
+    resp = client.patch(
+        f"/api/v1/experiments/{experiment_id}",
+        json={"conclusion": f"conclusion {SECRET}"},
+        headers=auth_headers(student_b),
+    )
+    assert resp.status_code == 200
 
     # Student B weekly report with private content
     resp = client.post(
@@ -75,8 +94,9 @@ def leak_setup(client, db, pi, student, student_b):
     return {"project_a": project_a, "project_b": project_b}
 
 
-def _patch_ai_enabled(monkeypatch, enabled: bool):
-    monkeypatch.setattr(settings, "AI_ENABLED", enabled)
+def _patch_ai_enabled(db, enabled: bool):
+    if enabled:
+        enable_ai(db)
 
 
 def test_search_hides_secret_from_unauthorized(client, db, leak_setup, student):
@@ -96,7 +116,9 @@ def test_search_finds_secret_for_pi(client, db, leak_setup, pi, student):
     assert resp.json()["data"]["projects"] == []
 
 
-def test_ai_retrieve_hides_secret_from_unauthorized(client, db, leak_setup, student, pi):
+def test_ai_retrieve_hides_secret_from_unauthorized(
+    client, db, leak_setup, student, pi
+):
     resp = client.post(
         "/api/v1/ai/retrieve",
         json={"query": SECRET},
@@ -132,12 +154,14 @@ def test_ai_retrieve_no_side_channel_message(client, db, leak_setup, student):
     assert all(not items for items in [data["hits"]])
 
 
-def test_llm_context_never_contains_secret(client, db, leak_setup, student, monkeypatch):
+def test_llm_context_never_contains_secret(
+    client, db, leak_setup, student, monkeypatch
+):
     """Student A asks a broad question; the token must not leak into the
     provider payload even though Project B exists."""
-    _patch_ai_enabled(monkeypatch, True)
+    _patch_ai_enabled(db, True)
     fake = FakeLLMProvider(response="本实验室最近的公开进展总结……")
-    monkeypatch.setattr("app.services.ai.service.build_provider", lambda: fake)
+    monkeypatch.setattr("app.services.ai.service.build_provider", lambda *a, **k: fake)
 
     resp = client.post(
         "/api/v1/ai/chat",
@@ -151,11 +175,13 @@ def test_llm_context_never_contains_secret(client, db, leak_setup, student, monk
     assert "PB-2" not in payload
 
 
-def test_weekly_report_never_leaks_to_other_student(client, db, leak_setup, student, monkeypatch):
+def test_weekly_report_never_leaks_to_other_student(
+    client, db, leak_setup, student, monkeypatch
+):
     """Student A asks about Student B's weekly reports -> nothing in context."""
-    _patch_ai_enabled(monkeypatch, True)
+    _patch_ai_enabled(db, True)
     fake = FakeLLMProvider(response="未找到相关信息")
-    monkeypatch.setattr("app.services.ai.service.build_provider", lambda: fake)
+    monkeypatch.setattr("app.services.ai.service.build_provider", lambda *a, **k: fake)
 
     resp = client.post(
         "/api/v1/ai/chat",

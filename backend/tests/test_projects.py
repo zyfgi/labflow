@@ -2,8 +2,7 @@
 
 from datetime import date, timedelta
 
-from app.models.project import Project, ProjectMember
-from tests.conftest import auth_headers, make_user
+from tests.conftest import auth_headers
 
 
 def setup_project(client, db, pi, student, student_b, visibility="project_members"):
@@ -31,30 +30,48 @@ def test_pi_creates_project_and_becomes_owner(client, db, pi):
     assert resp.status_code == 201
     data = resp.json()["data"]
     assert data["owner_id"] == pi.id
-    members = client.get(f"/api/v1/projects/{data['id']}/members", headers=auth_headers(pi))
+    members = client.get(
+        f"/api/v1/projects/{data['id']}/members", headers=auth_headers(pi)
+    )
     roles = {m["user_id"]: m["project_role"] for m in members.json()["data"]}
     assert roles[pi.id] == "owner"
 
 
 def test_duplicate_project_code(client, db, pi):
-    client.post("/api/v1/projects", json={"name": "A", "code": "DUP-1"}, headers=auth_headers(pi))
+    client.post(
+        "/api/v1/projects",
+        json={"name": "A", "code": "DUP-1"},
+        headers=auth_headers(pi),
+    )
     resp = client.post(
-        "/api/v1/projects", json={"name": "B", "code": "DUP-1"}, headers=auth_headers(pi)
+        "/api/v1/projects",
+        json={"name": "B", "code": "DUP-1"},
+        headers=auth_headers(pi),
     )
     assert resp.status_code == 409
 
 
-def test_non_member_student_cannot_read_private_project(client, db, pi, student, student_b):
+def test_private_project_read_tiers(client, db, pi, student, student_b):
+    """private = PI/owner/manager only; regular members use project_members."""
     project_id = setup_project(client, db, pi, student, student_b, visibility="private")
-    # student (member) can read
+    # member of a private project still cannot read it
     resp = client.get(f"/api/v1/projects/{project_id}", headers=auth_headers(student))
-    assert resp.status_code == 200
-    # student_b (not member) cannot
+    assert resp.status_code == 403
+    # non-member cannot either
     resp = client.get(f"/api/v1/projects/{project_id}", headers=auth_headers(student_b))
     assert resp.status_code == 403
+    # PI can
+    assert (
+        client.get(
+            f"/api/v1/projects/{project_id}", headers=auth_headers(pi)
+        ).status_code
+        == 200
+    )
 
 
-def test_lab_visible_project_readable_by_any_student(client, db, pi, student, student_b):
+def test_lab_visible_project_readable_by_any_student(
+    client, db, pi, student, student_b
+):
     project_id = setup_project(client, db, pi, student, student_b, visibility="lab")
     resp = client.get(f"/api/v1/projects/{project_id}", headers=auth_headers(student_b))
     assert resp.status_code == 200
@@ -85,11 +102,15 @@ def test_member_cannot_update_project_but_pi_can(client, db, pi, student):
         headers=auth_headers(pi),
     )
     resp = client.patch(
-        f"/api/v1/projects/{project_id}", json={"progress": 50}, headers=auth_headers(student)
+        f"/api/v1/projects/{project_id}",
+        json={"progress": 50},
+        headers=auth_headers(student),
     )
     assert resp.status_code == 403
     resp = client.patch(
-        f"/api/v1/projects/{project_id}", json={"progress": 50}, headers=auth_headers(pi)
+        f"/api/v1/projects/{project_id}",
+        json={"progress": 50},
+        headers=auth_headers(pi),
     )
     assert resp.status_code == 200
     assert resp.json()["data"]["progress"] == 50
@@ -177,7 +198,9 @@ def test_task_lifecycle_and_overdue(client, db, pi, student):
 
     # done sets 100% + completed_at
     resp = client.post(
-        f"/api/v1/tasks/{task_id}/status", json={"status": "done"}, headers=auth_headers(student)
+        f"/api/v1/tasks/{task_id}/status",
+        json={"status": "done"},
+        headers=auth_headers(student),
     )
     data = resp.json()["data"]
     assert data["progress"] == 100
@@ -229,7 +252,11 @@ def test_task_assignment_notifies_assignee(client, db, pi, student):
     project_id = _make_project_with_member(client, db, pi, student)
     resp = client.post(
         "/api/v1/tasks",
-        json={"project_id": project_id, "title": "notify-me", "assignee_id": student.id},
+        json={
+            "project_id": project_id,
+            "title": "notify-me",
+            "assignee_id": student.id,
+        },
         headers=auth_headers(pi),
     )
     assert resp.status_code == 201
@@ -241,3 +268,31 @@ def test_task_assignment_notifies_assignee(client, db, pi, student):
         select(Notification).where(Notification.user_id == student.id)
     ).all()
     assert any(n.type == "task_assigned" and n.title == "新任务分配" for n in notes)
+
+
+def test_search_never_leaks_private_project(client, db, pi, student, student_b):
+    """private: regular members lose read access too; search must follow."""
+    from tests.factories import add_project_member, create_project
+
+    private_id = create_project(
+        client, pi, name="SCOPE 秘密项目", visibility="private", code="SCOPE-SECRET"
+    )
+    member_project = create_project(
+        client, pi, name="成员可见项目", visibility="project_members", code="SCOPE-MEM"
+    )
+    add_project_member(client, pi, member_project, student)
+
+    for token, user in (
+        ("SCOPE-SECRET", student),
+        ("SCOPE-SECRET", student_b),
+        ("SCOPE-MEM", student_b),
+    ):
+        resp = client.get(f"/api/v1/search?q={token}", headers=auth_headers(user))
+        assert resp.status_code == 200
+        assert resp.json()["data"]["projects"] == []
+
+    # member sees the project_members tier; PI sees everything
+    resp = client.get("/api/v1/search?q=SCOPE-MEM", headers=auth_headers(student))
+    assert any(p["code"] == "SCOPE-MEM" for p in resp.json()["data"]["projects"])
+    resp = client.get("/api/v1/search?q=SCOPE", headers=auth_headers(pi))
+    assert len(resp.json()["data"]["projects"]) == 2

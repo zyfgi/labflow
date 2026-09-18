@@ -10,17 +10,17 @@ from app.core.deps import get_current_user
 from app.core.responses import ok
 from app.core.time import app_today, utcnow, week_start_of
 from app.database import get_db
-from app.models.equipment import (
-    Equipment,
-    EquipmentBooking,
-    EquipmentMaintenance,
-)
 from app.models.enums import (
     BookingStatus,
     EquipmentStatus,
     MaintenanceStatus,
     ReportStatus,
     TaskStatus,
+)
+from app.models.equipment import (
+    Equipment,
+    EquipmentBooking,
+    EquipmentMaintenance,
 )
 from app.models.experiment import Experiment
 from app.models.project import Milestone, Project, ProjectMember, Task
@@ -30,7 +30,12 @@ from app.models.user import MemberProfile, User
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
-OPEN_TASK_STATUSES = (TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED, TaskStatus.REVIEW)
+OPEN_TASK_STATUSES = (
+    TaskStatus.TODO,
+    TaskStatus.IN_PROGRESS,
+    TaskStatus.BLOCKED,
+    TaskStatus.REVIEW,
+)
 
 
 @router.get("/pi")
@@ -47,67 +52,112 @@ def pi_dashboard(
     week_start = week_start_of()
 
     # ---- KPIs ----
-    member_total = db.scalar(
-        select(func.count()).select_from(MemberProfile).where(MemberProfile.status == "active")
-    ) or 0
-    active_projects = db.scalar(
-        select(func.count()).select_from(Project).where(
-            Project.deleted_at.is_(None), Project.status == "active"
+    member_total = (
+        db.scalar(
+            select(func.count())
+            .select_from(MemberProfile)
+            .where(MemberProfile.status == "active")
         )
-    ) or 0
+        or 0
+    )
+    active_projects = (
+        db.scalar(
+            select(func.count())
+            .select_from(Project)
+            .where(Project.deleted_at.is_(None), Project.status == "active")
+        )
+        or 0
+    )
 
     student_ids = db.scalars(
         select(User.id).where(User.role == "STUDENT", User.status == "active")
     ).all()
     student_member_ids = db.scalars(
         select(MemberProfile.id).where(
-            MemberProfile.user_id.in_(student_ids or [0]), MemberProfile.status == "active"
+            MemberProfile.user_id.in_(student_ids or [0]),
+            MemberProfile.status == "active",
         )
     ).all()
     submitted_count = 0
     if student_member_ids:
-        submitted_count = db.scalar(
-            select(func.count()).select_from(WeeklyReport).where(
-                WeeklyReport.member_id.in_(student_member_ids),
-                WeeklyReport.week_start == week_start,
-                WeeklyReport.status.in_((ReportStatus.SUBMITTED, ReportStatus.REVIEWED)),
+        submitted_count = (
+            db.scalar(
+                select(func.count())
+                .select_from(WeeklyReport)
+                .where(
+                    WeeklyReport.member_id.in_(student_member_ids),
+                    WeeklyReport.week_start == week_start,
+                    WeeklyReport.status.in_(
+                        (ReportStatus.SUBMITTED, ReportStatus.REVIEWED)
+                    ),
+                )
             )
-        ) or 0
-    report_rate = round(submitted_count * 100 / len(student_member_ids)) if student_member_ids else 0
+            or 0
+        )
+    report_rate = (
+        round(submitted_count * 100 / len(student_member_ids))
+        if student_member_ids
+        else 0
+    )
 
-    open_tasks = db.scalar(
-        select(func.count()).select_from(Task).where(
-            Task.deleted_at.is_(None), Task.status.in_(OPEN_TASK_STATUSES)
+    open_tasks = (
+        db.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(Task.deleted_at.is_(None), Task.status.in_(OPEN_TASK_STATUSES))
         )
-    ) or 0
-    overdue_tasks = db.scalar(
-        select(func.count()).select_from(Task).where(
-            Task.deleted_at.is_(None),
-            Task.status.in_(OPEN_TASK_STATUSES),
-            Task.due_date < today,
+        or 0
+    )
+    overdue_tasks = (
+        db.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(
+                Task.deleted_at.is_(None),
+                Task.status.in_(OPEN_TASK_STATUSES),
+                Task.due_date < today,
+            )
         )
-    ) or 0
+        or 0
+    )
     week_start_dt = datetime.combine(week_start, datetime.min.time())
-    experiments_this_week = db.scalar(
-        select(func.count()).select_from(Experiment).where(
-            Experiment.deleted_at.is_(None), Experiment.created_at >= week_start_dt
+    experiments_this_week = (
+        db.scalar(
+            select(func.count())
+            .select_from(Experiment)
+            .where(
+                Experiment.deleted_at.is_(None), Experiment.created_at >= week_start_dt
+            )
         )
-    ) or 0
-    equipment_fault = db.scalar(
-        select(func.count()).select_from(Equipment).where(
-            Equipment.deleted_at.is_(None),
-            Equipment.status.in_((EquipmentStatus.FAULT, EquipmentStatus.MAINTENANCE)),
+        or 0
+    )
+    equipment_fault = (
+        db.scalar(
+            select(func.count())
+            .select_from(Equipment)
+            .where(
+                Equipment.deleted_at.is_(None),
+                Equipment.status.in_(
+                    (EquipmentStatus.FAULT, EquipmentStatus.MAINTENANCE)
+                ),
+            )
         )
-    ) or 0
+        or 0
+    )
     today_start = datetime.combine(today, datetime.min.time())
     tomorrow_start = today_start + timedelta(days=1)
-    bookings_today = db.scalar(
-        select(func.count()).select_from(EquipmentBooking).where(
-            EquipmentBooking.status == BookingStatus.APPROVED,
-            EquipmentBooking.start_time < tomorrow_start,
-            EquipmentBooking.end_time > today_start,
+    bookings_today = (
+        db.scalar(
+            select(func.count())
+            .select_from(EquipmentBooking)
+            .where(
+                EquipmentBooking.status == BookingStatus.APPROVED,
+                EquipmentBooking.start_time < tomorrow_start,
+                EquipmentBooking.end_time > today_start,
+            )
         )
-    ) or 0
+        or 0
+    )
 
     kpis = {
         "member_total": member_total,
@@ -124,7 +174,9 @@ def pi_dashboard(
 
     # ---- member progress (set-based: 5 aggregate queries total) ----
     members = db.scalars(
-        select(MemberProfile).options(joinedload(MemberProfile.user)).where(MemberProfile.status == "active")
+        select(MemberProfile)
+        .options(joinedload(MemberProfile.user))
+        .where(MemberProfile.status == "active")
     ).all()
     member_user_ids = [m.user_id for m in members]
 
@@ -163,9 +215,9 @@ def pi_dashboard(
     exp_by_user = {r[0]: r[1] for r in exp_rows}
 
     pm_rows = db.execute(
-        select(ProjectMember.user_id, Project.id, Project.name).join(
-            Project, ProjectMember.project_id == Project.id
-        ).where(
+        select(ProjectMember.user_id, Project.id, Project.name)
+        .join(Project, ProjectMember.project_id == Project.id)
+        .where(
             ProjectMember.left_at.is_(None),
             ProjectMember.user_id.in_(member_user_ids or [0]),
             Project.deleted_at.is_(None),
@@ -191,21 +243,28 @@ def pi_dashboard(
                 "in_progress_tasks": open_n,
                 "overdue_tasks": overdue_n,
                 "this_week_report": report_by_member.get(m.id, "none"),
-                "latest_experiment_date": latest_exp.isoformat() if latest_exp else None,
+                "latest_experiment_date": latest_exp.isoformat()
+                if latest_exp
+                else None,
             }
         )
 
     # ---- project progress (set-based: 4 queries total) ----
     projects = db.scalars(
         select(Project)
-        .where(Project.deleted_at.is_(None), Project.status.in_(("planning", "active", "paused")))
+        .where(
+            Project.deleted_at.is_(None),
+            Project.status.in_(("planning", "active", "paused")),
+        )
         .order_by(Project.priority.desc(), Project.updated_at.desc())
         .limit(12)
     ).all()
     project_ids = [p.id for p in projects]
     owner_ids = {p.owner_id for p in projects if p.owner_id}
     owner_names = dict(
-        db.execute(select(User.id, User.name).where(User.id.in_(owner_ids or [0]))).all()
+        db.execute(
+            select(User.id, User.name).where(User.id.in_(owner_ids or [0]))
+        ).all()
     )
 
     ptask_rows = db.execute(
@@ -215,7 +274,8 @@ def pi_dashboard(
             func.sum(case((Task.status == TaskStatus.DONE, 1), else_=0)).label("done"),
             func.sum(
                 case(
-                    (Task.status.in_(OPEN_TASK_STATUSES) & (Task.due_date < today), 1), else_=0
+                    (Task.status.in_(OPEN_TASK_STATUSES) & (Task.due_date < today), 1),
+                    else_=0,
                 )
             ).label("overdue"),
         )
@@ -252,20 +312,30 @@ def pi_dashboard(
                 "task_total": total_t,
                 "overdue_tasks": overdue_t,
                 "next_milestone": (
-                    {"title": ms.title, "due_date": ms.due_date.isoformat()} if ms else None
+                    {"title": ms.title, "due_date": ms.due_date.isoformat()}
+                    if ms
+                    else None
                 ),
             }
         )
 
     # ---- pending items ----
-    pending_reports = db.scalar(
-        select(func.count()).select_from(WeeklyReport).where(WeeklyReport.status == ReportStatus.SUBMITTED)
-    ) or 0
-    pending_bookings = db.scalar(
-        select(func.count()).select_from(EquipmentBooking).where(
-            EquipmentBooking.status == BookingStatus.PENDING
+    pending_reports = (
+        db.scalar(
+            select(func.count())
+            .select_from(WeeklyReport)
+            .where(WeeklyReport.status == ReportStatus.SUBMITTED)
         )
-    ) or 0
+        or 0
+    )
+    pending_bookings = (
+        db.scalar(
+            select(func.count())
+            .select_from(EquipmentBooking)
+            .where(EquipmentBooking.status == BookingStatus.PENDING)
+        )
+        or 0
+    )
     fault_equipment = db.scalars(
         select(Equipment).where(
             Equipment.deleted_at.is_(None),
@@ -284,11 +354,13 @@ def pi_dashboard(
         .limit(8)
     ).all()
     overdue_task_rows = db.scalars(
-        select(Task).where(
+        select(Task)
+        .where(
             Task.deleted_at.is_(None),
             Task.status.in_(OPEN_TASK_STATUSES),
             Task.due_date < today,
-        ).order_by(Task.due_date)
+        )
+        .order_by(Task.due_date)
         .limit(8)
     ).all()
 
@@ -296,11 +368,16 @@ def pi_dashboard(
         "pending_reports": pending_reports,
         "pending_bookings": pending_bookings,
         "overdue_tasks": [
-            {"id": t.id, "title": t.title, "due_date": t.due_date.isoformat() if t.due_date else None}
+            {
+                "id": t.id,
+                "title": t.title,
+                "due_date": t.due_date.isoformat() if t.due_date else None,
+            }
             for t in overdue_task_rows
         ],
         "fault_equipment": [
-            {"id": e.id, "name": e.name, "status": e.status, "asset_no": e.asset_no} for e in fault_equipment
+            {"id": e.id, "name": e.name, "status": e.status, "asset_no": e.asset_no}
+            for e in fault_equipment
         ],
         "due_milestones": [
             {
@@ -316,39 +393,61 @@ def pi_dashboard(
     # ---- recent activity ----
     activity = []
     for exp in db.scalars(
-        select(Experiment).options(joinedload(Experiment.owner_ref)).where(Experiment.deleted_at.is_(None))
-        .order_by(Experiment.created_at.desc()).limit(5)
+        select(Experiment)
+        .options(joinedload(Experiment.owner_ref))
+        .where(Experiment.deleted_at.is_(None))
+        .order_by(Experiment.created_at.desc())
+        .limit(5)
     ):
         activity.append(
-            {"time": exp.created_at.isoformat(), "type": "experiment",
-             "text": f"{exp.owner_ref.name if exp.owner_ref else ''} 创建实验 {exp.experiment_no}「{exp.title}」"}
+            {
+                "time": exp.created_at.isoformat(),
+                "type": "experiment",
+                "text": f"{exp.owner_ref.name if exp.owner_ref else ''} 创建实验 {exp.experiment_no}「{exp.title}」",
+            }
         )
     for r in db.scalars(
-        select(WeeklyReport).options(joinedload(WeeklyReport.member).joinedload(MemberProfile.user))
+        select(WeeklyReport)
+        .options(joinedload(WeeklyReport.member).joinedload(MemberProfile.user))
         .where(WeeklyReport.status.in_((ReportStatus.SUBMITTED, ReportStatus.REVIEWED)))
-        .order_by(WeeklyReport.updated_at.desc()).limit(5)
+        .order_by(WeeklyReport.updated_at.desc())
+        .limit(5)
     ):
         name = r.member.user.name if r.member and r.member.user else ""
         action = "提交" if r.status == ReportStatus.SUBMITTED else "的周报被审核"
         activity.append(
-            {"time": (r.submitted_at or r.updated_at).isoformat(), "type": "report",
-             "text": f"{name} {action} {r.week_start} 周报"}
+            {
+                "time": (r.submitted_at or r.updated_at).isoformat(),
+                "type": "report",
+                "text": f"{name} {action} {r.week_start} 周报",
+            }
         )
     for t in db.scalars(
-        select(Task).where(Task.status == TaskStatus.DONE, Task.completed_at.is_not(None))
-        .order_by(Task.completed_at.desc()).limit(5)
+        select(Task)
+        .where(Task.status == TaskStatus.DONE, Task.completed_at.is_not(None))
+        .order_by(Task.completed_at.desc())
+        .limit(5)
     ):
         activity.append(
-            {"time": t.completed_at.isoformat(), "type": "task", "text": f"任务「{t.title}」完成"}
+            {
+                "time": t.completed_at.isoformat(),
+                "type": "task",
+                "text": f"任务「{t.title}」完成",
+            }
         )
     for m in db.scalars(
-        select(EquipmentMaintenance).order_by(EquipmentMaintenance.reported_at.desc()).limit(3)
+        select(EquipmentMaintenance)
+        .order_by(EquipmentMaintenance.reported_at.desc())
+        .limit(3)
     ):
         eq = db.get(Equipment, m.equipment_id)
         if eq:
             activity.append(
-                {"time": (m.reported_at or m.created_at).isoformat(), "type": "equipment",
-                 "text": f"设备「{eq.name}」进入{ '维修' if m.status == MaintenanceStatus.PROCESSING else '上报'}状态"}
+                {
+                    "time": (m.reported_at or m.created_at).isoformat(),
+                    "type": "equipment",
+                    "text": f"设备「{eq.name}」进入{'维修' if m.status == MaintenanceStatus.PROCESSING else '上报'}状态",
+                }
             )
     activity.sort(key=lambda a: a["time"], reverse=True)
     activity = activity[:10]
@@ -373,40 +472,59 @@ def student_dashboard(
     week_start = week_start_of()
     uid = user.id
 
-    in_progress = db.scalar(
-        select(func.count()).select_from(Task).where(
-            Task.assignee_id == uid, Task.deleted_at.is_(None), Task.status.in_(OPEN_TASK_STATUSES)
+    in_progress = (
+        db.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(
+                Task.assignee_id == uid,
+                Task.deleted_at.is_(None),
+                Task.status.in_(OPEN_TASK_STATUSES),
+            )
         )
-    ) or 0
-    overdue = db.scalar(
-        select(func.count()).select_from(Task).where(
-            Task.assignee_id == uid,
-            Task.deleted_at.is_(None),
-            Task.status.in_(OPEN_TASK_STATUSES),
-            Task.due_date < today,
+        or 0
+    )
+    overdue = (
+        db.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(
+                Task.assignee_id == uid,
+                Task.deleted_at.is_(None),
+                Task.status.in_(OPEN_TASK_STATUSES),
+                Task.due_date < today,
+            )
         )
-    ) or 0
+        or 0
+    )
 
     my_member_id = user.member_profile.id if user.member_profile else None
     report = None
     if my_member_id:
         report = db.scalar(
             select(WeeklyReport).where(
-                WeeklyReport.member_id == my_member_id, WeeklyReport.week_start == week_start
+                WeeklyReport.member_id == my_member_id,
+                WeeklyReport.week_start == week_start,
             )
         )
-    my_experiments = db.scalar(
-        select(func.count()).select_from(Experiment).where(
-            Experiment.owner_id == uid, Experiment.deleted_at.is_(None)
+    my_experiments = (
+        db.scalar(
+            select(func.count())
+            .select_from(Experiment)
+            .where(Experiment.owner_id == uid, Experiment.deleted_at.is_(None))
         )
-    ) or 0
+        or 0
+    )
 
     upcoming_bookings = db.scalars(
-        select(EquipmentBooking).where(
+        select(EquipmentBooking)
+        .where(
             EquipmentBooking.user_id == uid,
             EquipmentBooking.status == BookingStatus.APPROVED,
             EquipmentBooking.end_time > utcnow(),
-        ).order_by(EquipmentBooking.start_time).limit(5)
+        )
+        .order_by(EquipmentBooking.start_time)
+        .limit(5)
     ).all()
     booking_rows = []
     for b in upcoming_bookings:
@@ -421,9 +539,14 @@ def student_dashboard(
         )
 
     my_tasks = db.scalars(
-        select(Task).where(
-            Task.assignee_id == uid, Task.deleted_at.is_(None), Task.status.in_(OPEN_TASK_STATUSES)
-        ).order_by(Task.due_date.asc().nullslast()).limit(8)
+        select(Task)
+        .where(
+            Task.assignee_id == uid,
+            Task.deleted_at.is_(None),
+            Task.status.in_(OPEN_TASK_STATUSES),
+        )
+        .order_by(Task.due_date.asc().nullslast())
+        .limit(8)
     ).all()
     task_rows = []
     for t in my_tasks:
@@ -441,15 +564,20 @@ def student_dashboard(
         )
 
     recent_experiments = db.scalars(
-        select(Experiment).where(Experiment.owner_id == uid, Experiment.deleted_at.is_(None))
-        .order_by(Experiment.updated_at.desc()).limit(5)
+        select(Experiment)
+        .where(Experiment.owner_id == uid, Experiment.deleted_at.is_(None))
+        .order_by(Experiment.updated_at.desc())
+        .limit(5)
     ).all()
 
-    unread_notifications = db.scalar(
-        select(func.count()).select_from(Notification).where(
-            Notification.user_id == uid, Notification.is_read.is_(False)
+    unread_notifications = (
+        db.scalar(
+            select(func.count())
+            .select_from(Notification)
+            .where(Notification.user_id == uid, Notification.is_read.is_(False))
         )
-    ) or 0
+        or 0
+    )
 
     my_projects = []
     proj_ids = db.scalars(
@@ -458,9 +586,13 @@ def student_dashboard(
         )
     ).all()
     for p in db.scalars(
-        select(Project).where(Project.id.in_(proj_ids or [0]), Project.deleted_at.is_(None))
+        select(Project).where(
+            Project.id.in_(proj_ids or [0]), Project.deleted_at.is_(None)
+        )
     ).all():
-        my_projects.append({"id": p.id, "name": p.name, "status": p.status, "progress": p.progress})
+        my_projects.append(
+            {"id": p.id, "name": p.name, "status": p.status, "progress": p.progress}
+        )
 
     return ok(
         {
@@ -480,7 +612,9 @@ def student_dashboard(
                     "experiment_no": e.experiment_no,
                     "title": e.title,
                     "status": e.status,
-                    "experiment_date": e.experiment_date.isoformat() if e.experiment_date else None,
+                    "experiment_date": e.experiment_date.isoformat()
+                    if e.experiment_date
+                    else None,
                 }
                 for e in recent_experiments
             ],

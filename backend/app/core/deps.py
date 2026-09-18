@@ -40,7 +40,9 @@ def get_current_user(
 def require_roles(*roles: str):
     def dependency(user: User = Depends(get_current_user)) -> User:
         if user.role not in roles:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="没有执行该操作的权限")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="没有执行该操作的权限"
+            )
         return user
 
     return dependency

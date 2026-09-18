@@ -13,3 +13,5 @@ pytest>=8.2
 openpyxl>=3.1
 psycopg2-binary>=2.9; platform_system != "Windows" or python_version < "3.13"
 tzdata>=2024.1
+cryptography>=42
+pytest-cov

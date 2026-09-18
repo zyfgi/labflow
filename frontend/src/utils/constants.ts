@@ -1,4 +1,4 @@
-// 统一状态语义颜色（PRD §23）:
+// 统一状态语义颜色:
 // success=completed/available/approved, warning=pending/blocked/maintenance,
 // danger=overdue/fault/rejected, info=draft/archived/paused, primary=active/in_progress
 export type TagType = 'success' | 'warning' | 'danger' | 'info' | 'primary'

@@ -1,12 +1,11 @@
-
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, write_audit_log
-from app.core.time import app_today, utcnow
 from app.core.responses import ok, paged
+from app.core.time import app_today, utcnow
 from app.database import get_db
 from app.models.experiment import Experiment, ExperimentAttachment
 from app.models.project import Project
@@ -15,9 +14,9 @@ from app.permissions.projects import (
     can_create_experiment,
     can_manage_project,
     can_read_project,
+    visible_project_ids_subquery,
 )
 from app.schemas.experiment import ExperimentCreate, ExperimentOut, ExperimentUpdate
-from app.permissions.projects import visible_project_ids_subquery
 from app.storage import storage_service
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
@@ -38,9 +37,10 @@ def _ensure_experiment_visible(db: Session, user: User, exp: Experiment) -> None
 
 
 def _can_edit_experiment(db: Session, user: User, exp: Experiment) -> bool:
-    project = db.get(Project, exp.project_id)
+    # a locked record is frozen for everyone, including PI — unlock first
     if exp.is_locked:
-        return user.role == "PI"  # locked: only PI (after unlock) intervenes
+        return False
+    project = db.get(Project, exp.project_id)
     if exp.owner_id == user.id:
         return True
     return bool(project and can_manage_project(db, user, project))
@@ -65,13 +65,17 @@ def _generate_experiment_no(db: Session) -> str:
     prefix = f"EXP-{app_today().strftime('%Y%m%d')}-"
     count = (
         db.scalar(
-            select(func.count()).select_from(Experiment).where(Experiment.experiment_no.like(f"{prefix}%"))
+            select(func.count())
+            .select_from(Experiment)
+            .where(Experiment.experiment_no.like(f"{prefix}%"))
         )
         or 0
     )
     for attempt in range(50):
         candidate = f"{prefix}{count + attempt + 1:04d}"
-        exists = db.scalar(select(Experiment.id).where(Experiment.experiment_no == candidate))
+        exists = db.scalar(
+            select(Experiment.id).where(Experiment.experiment_no == candidate)
+        )
         if not exists:
             return candidate
     raise HTTPException(status_code=500, detail="实验编号生成失败，请重试")
@@ -102,9 +106,7 @@ def list_experiments(
         stmt = stmt.where(Experiment.project_id == project_id)
     else:
         # shared permission scope, pushed into SQL
-        stmt = stmt.where(
-            Experiment.project_id.in_(visible_project_ids_subquery(user))
-        )
+        stmt = stmt.where(Experiment.project_id.in_(visible_project_ids_subquery(user)))
 
     if status:
         stmt = stmt.where(Experiment.status == status)
@@ -116,17 +118,23 @@ def list_experiments(
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(
-        stmt.order_by(Experiment.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        stmt.order_by(Experiment.updated_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     ).all()
 
     # batch maps: constant query count regardless of page size
     owner_ids = {e.owner_id for e in rows if e.owner_id}
     owner_names = dict(
-        db.execute(select(User.id, User.name).where(User.id.in_(owner_ids or [0]))).all()
+        db.execute(
+            select(User.id, User.name).where(User.id.in_(owner_ids or [0]))
+        ).all()
     )
     project_names = dict(
         db.execute(
-            select(Project.id, Project.name).where(Project.id.in_({e.project_id for e in rows} or [0]))
+            select(Project.id, Project.name).where(
+                Project.id.in_({e.project_id for e in rows} or [0])
+            )
         ).all()
     )
 
@@ -161,7 +169,9 @@ def create_experiment(
     )
     db.add(exp)
     db.flush()
-    write_audit_log(db, user, "create_experiment", "experiment", exp.id, {"no": exp.experiment_no})
+    write_audit_log(
+        db, user, "create_experiment", "experiment", exp.id, {"no": exp.experiment_no}
+    )
     db.commit()
     return ok(_out(exp), message="实验记录已创建")
 
@@ -210,7 +220,14 @@ def update_experiment(
     data = body.model_dump(exclude_unset=True)
     for field, value in data.items():
         setattr(exp, field, value)
-    write_audit_log(db, user, "update_experiment", "experiment", exp.id, {"fields": list(data.keys())})
+    write_audit_log(
+        db,
+        user,
+        "update_experiment",
+        "experiment",
+        exp.id,
+        {"fields": list(data.keys())},
+    )
     db.commit()
     return ok(_out(exp), message="实验已更新")
 
@@ -222,6 +239,8 @@ def delete_experiment(
     db: Session = Depends(get_db),
 ) -> dict:
     exp = _get_experiment(db, experiment_id)
+    if exp.is_locked:
+        raise HTTPException(status_code=403, detail="实验已锁定，不能删除")
     if not _can_lock(db, user, exp):
         raise HTTPException(status_code=403, detail="只有项目管理方可以删除实验")
     exp.deleted_at = utcnow()
@@ -244,7 +263,9 @@ def lock_experiment(
     exp.is_locked = True
     exp.locked_at = utcnow()
     exp.locked_by = user.id
-    write_audit_log(db, user, "lock_experiment", "experiment", exp.id, {"no": exp.experiment_no})
+    write_audit_log(
+        db, user, "lock_experiment", "experiment", exp.id, {"no": exp.experiment_no}
+    )
     db.commit()
     return ok(_out(exp), message="实验已锁定")
 
@@ -263,7 +284,9 @@ def unlock_experiment(
     exp.is_locked = False
     exp.locked_at = None
     exp.locked_by = None
-    write_audit_log(db, user, "unlock_experiment", "experiment", exp.id, {"no": exp.experiment_no})
+    write_audit_log(
+        db, user, "unlock_experiment", "experiment", exp.id, {"no": exp.experiment_no}
+    )
     db.commit()
     return ok(_out(exp), message="实验已解锁")
 
@@ -281,7 +304,15 @@ def upload_attachment(
     exp = _get_experiment(db, experiment_id)
     if not _can_edit_experiment(db, user, exp):
         raise HTTPException(status_code=403, detail="没有上传权限（实验可能已锁定）")
-    rel_path, size, content_type = storage_service.save_upload(f"experiments/{exp.id}", file)
+    from app.services import runtime_settings
+
+    cfg = runtime_settings.effective(db)
+    rel_path, size, content_type = storage_service.save_upload(
+        f"experiments/{exp.id}",
+        file,
+        max_bytes=cfg.UPLOAD_MAX_MB * 1024 * 1024,
+        allowed_extensions=cfg.ALLOWED_UPLOAD_EXTENSIONS,
+    )
     att = ExperimentAttachment(
         experiment_id=exp.id,
         file_name=file.filename or "file",
@@ -291,7 +322,9 @@ def upload_attachment(
         uploaded_by=user.id,
     )
     db.add(att)
-    write_audit_log(db, user, "upload_attachment", "experiment", exp.id, {"file": att.file_name})
+    write_audit_log(
+        db, user, "upload_attachment", "experiment", exp.id, {"file": att.file_name}
+    )
     db.commit()
     return ok(
         {
@@ -315,11 +348,16 @@ def delete_attachment(
         raise HTTPException(status_code=404, detail="附件不存在")
     exp = _get_experiment(db, att.experiment_id)
     # a locked experiment is frozen: the uploader cannot delete via uploaded_by
-    if not (_can_edit_experiment(db, user, exp) or (not exp.is_locked and att.uploaded_by == user.id)):
+    if not (
+        _can_edit_experiment(db, user, exp)
+        or (not exp.is_locked and att.uploaded_by == user.id)
+    ):
         raise HTTPException(status_code=403, detail="没有删除该附件的权限")
     storage_service.delete(att.storage_path)
     db.delete(att)
-    write_audit_log(db, user, "delete_attachment", "experiment", exp.id, {"file": att.file_name})
+    write_audit_log(
+        db, user, "delete_attachment", "experiment", exp.id, {"file": att.file_name}
+    )
     db.commit()
     return ok(message="附件已删除")
 
@@ -336,4 +374,6 @@ def download_attachment(
     exp = _get_experiment(db, att.experiment_id)
     _ensure_experiment_visible(db, user, exp)
     path = storage_service.open_path(att.storage_path)
-    return FileResponse(path, filename=att.file_name, media_type="application/octet-stream")
+    return FileResponse(
+        path, filename=att.file_name, media_type="application/octet-stream"
+    )

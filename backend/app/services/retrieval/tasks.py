@@ -3,10 +3,10 @@
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.core.time import app_today, time_range
 from app.models.project import Project, Task
 from app.models.user import User
 from app.permissions.projects import visible_task_scope_conditions
-from app.core.time import app_today, time_range
 from app.services.retrieval.common import truncate
 from app.services.retrieval.entity_resolver import ResolvedEntities
 from app.services.retrieval.types import RetrievalHit, RetrievalPlan
@@ -68,7 +68,9 @@ def search_tasks(
 
     project_names = {
         p.id: p.name
-        for p in db.scalars(select(Project).where(Project.id.in_([r.project_id for r in rows]))).all()
+        for p in db.scalars(
+            select(Project).where(Project.id.in_([r.project_id for r in rows]))
+        ).all()
     }
     user_names = {}
     assignee_ids = {r.assignee_id for r in rows if r.assignee_id}
@@ -88,9 +90,7 @@ def search_tasks(
                 score += 4
             if t.description and kw.lower() in t.description.lower():
                 score += 2
-        is_overdue = bool(
-            t.due_date and t.due_date < today and t.status not in _DONE
-        )
+        is_overdue = bool(t.due_date and t.due_date < today and t.status not in _DONE)
         if plan.intent == "overdue_tasks" and is_overdue:
             score += 3
         if assignee_id and t.assignee_id == assignee_id:

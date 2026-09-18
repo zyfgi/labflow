@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import ALL_ROLES
+from app.schemas.base import StrictSchema
 
 
 class LoginRequest(BaseModel):
@@ -41,7 +42,7 @@ class UserCreate(UserBase):
     password: str = Field(min_length=6, max_length=128)
 
 
-class UserUpdate(BaseModel):
+class UserUpdate(StrictSchema):
     name: str | None = Field(default=None, max_length=100)
     email: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=30)

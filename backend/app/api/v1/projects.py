@@ -11,8 +11,8 @@ from app.permissions.projects import (
     ensure_project_manageable,
     ensure_project_visible,
     is_project_member,
+    visible_project_ids_subquery,
 )
-from app.permissions.projects import visible_project_ids_subquery
 from app.schemas.project import (
     MilestoneCreate,
     MilestoneOut,
@@ -71,13 +71,17 @@ def list_projects(
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(
-        stmt.order_by(Project.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        stmt.order_by(Project.updated_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     ).all()
 
     # batch maps: constant query count regardless of page size
     owner_ids = {p.owner_id for p in rows if p.owner_id}
     owner_names = dict(
-        db.execute(select(User.id, User.name).where(User.id.in_(owner_ids or [0]))).all()
+        db.execute(
+            select(User.id, User.name).where(User.id.in_(owner_ids or [0]))
+        ).all()
     )
     my_memberships = dict(
         db.execute(
@@ -123,7 +127,9 @@ def create_project(
     db.add(project)
     db.flush()
     db.add(ProjectMember(project_id=project.id, user_id=user.id, project_role="owner"))
-    write_audit_log(db, user, "create_project", "project", project.id, {"code": project.code})
+    write_audit_log(
+        db, user, "create_project", "project", project.id, {"code": project.code}
+    )
     db.commit()
     return ok(_out(project, user.name), message="项目创建成功")
 
@@ -139,26 +145,43 @@ def get_project(
     item = _out(project, _owner_name(db, project))
     item["my_role"] = _my_role(db, project, user)
 
-    total_tasks = db.scalar(
-        select(func.count()).select_from(Task).where(
-            Task.project_id == project.id, Task.deleted_at.is_(None)
+    total_tasks = (
+        db.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(Task.project_id == project.id, Task.deleted_at.is_(None))
         )
-    ) or 0
-    done_tasks = db.scalar(
-        select(func.count()).select_from(Task).where(
-            Task.project_id == project.id, Task.deleted_at.is_(None), Task.status == "done"
+        or 0
+    )
+    done_tasks = (
+        db.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(
+                Task.project_id == project.id,
+                Task.deleted_at.is_(None),
+                Task.status == "done",
+            )
         )
-    ) or 0
-    overdue_tasks = db.scalar(
-        select(func.count()).select_from(Task).where(
-            Task.project_id == project.id,
-            Task.deleted_at.is_(None),
-            Task.status.notin_(("done", "cancelled")),
-            Task.due_date < func.current_date(),
+        or 0
+    )
+    overdue_tasks = (
+        db.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(
+                Task.project_id == project.id,
+                Task.deleted_at.is_(None),
+                Task.status.notin_(("done", "cancelled")),
+                Task.due_date < func.current_date(),
+            )
         )
-    ) or 0
+        or 0
+    )
     milestones = db.scalars(
-        select(Milestone).where(Milestone.project_id == project.id).order_by(Milestone.due_date)
+        select(Milestone)
+        .where(Milestone.project_id == project.id)
+        .order_by(Milestone.due_date)
     ).all()
 
     item["task_total"] = int(total_tasks or 0)
@@ -180,7 +203,9 @@ def update_project(
     data = body.model_dump(exclude_unset=True)
     for field, value in data.items():
         setattr(project, field, value)
-    write_audit_log(db, user, "update_project", "project", project.id, {"fields": list(data.keys())})
+    write_audit_log(
+        db, user, "update_project", "project", project.id, {"fields": list(data.keys())}
+    )
     db.commit()
     return ok(_out(project, _owner_name(db, project)), message="项目更新成功")
 
@@ -197,7 +222,9 @@ def delete_project(
     from app.models.base import utcnow
 
     project.deleted_at = utcnow()
-    write_audit_log(db, user, "delete_project", "project", project.id, {"code": project.code})
+    write_audit_log(
+        db, user, "delete_project", "project", project.id, {"code": project.code}
+    )
     db.commit()
     return ok(message="项目已删除")
 
@@ -248,7 +275,11 @@ def add_project_member(
         raise HTTPException(status_code=404, detail="用户不存在")
     if is_project_member(db, project_id, body.user_id):
         raise HTTPException(status_code=409, detail="该用户已是项目成员")
-    db.add(ProjectMember(project_id=project_id, user_id=body.user_id, project_role=body.project_role))
+    db.add(
+        ProjectMember(
+            project_id=project_id, user_id=body.user_id, project_role=body.project_role
+        )
+    )
     create_notification(
         db,
         body.user_id,
@@ -258,7 +289,9 @@ def add_project_member(
         "project",
         project.id,
     )
-    write_audit_log(db, user, "add_project_member", "project", project_id, {"user_id": body.user_id})
+    write_audit_log(
+        db, user, "add_project_member", "project", project_id, {"user_id": body.user_id}
+    )
     db.commit()
     return ok(message="成员已加入")
 
@@ -278,7 +311,9 @@ def remove_project_member(
     if not membership:
         raise HTTPException(status_code=404, detail="该用户不是项目成员")
     db.delete(membership)
-    write_audit_log(db, user, "remove_project_member", "project", project_id, {"user_id": user_id})
+    write_audit_log(
+        db, user, "remove_project_member", "project", project_id, {"user_id": user_id}
+    )
     db.commit()
     return ok(message="成员已移除")
 
@@ -295,7 +330,9 @@ def list_milestones(
     project = _get_project(db, project_id)
     ensure_project_visible(db, user, project)
     rows = db.scalars(
-        select(Milestone).where(Milestone.project_id == project_id).order_by(Milestone.due_date)
+        select(Milestone)
+        .where(Milestone.project_id == project_id)
+        .order_by(Milestone.due_date)
     ).all()
     return ok([MilestoneOut.model_validate(m).model_dump() for m in rows])
 
@@ -314,7 +351,9 @@ def create_milestone(
     db.flush()
     write_audit_log(db, user, "create_milestone", "milestone", milestone.id)
     db.commit()
-    return ok(MilestoneOut.model_validate(milestone).model_dump(), message="里程碑已创建")
+    return ok(
+        MilestoneOut.model_validate(milestone).model_dump(), message="里程碑已创建"
+    )
 
 
 milestones_router = APIRouter(prefix="/milestones", tags=["milestones"])
@@ -346,7 +385,9 @@ def update_milestone(
         setattr(milestone, field, value)
     write_audit_log(db, user, "update_milestone", "milestone", milestone.id)
     db.commit()
-    return ok(MilestoneOut.model_validate(milestone).model_dump(), message="里程碑已更新")
+    return ok(
+        MilestoneOut.model_validate(milestone).model_dump(), message="里程碑已更新"
+    )
 
 
 @milestones_router.delete("/{milestone_id}")

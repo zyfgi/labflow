@@ -91,10 +91,19 @@ def retrieve(
         fn = searchers.get(source)
         if fn is None:
             continue
-        found = fn(db, user, effective_plan, entities, limit=per_source, use_keywords=use_keywords)
+        found = fn(
+            db,
+            user,
+            effective_plan,
+            entities,
+            limit=per_source,
+            use_keywords=use_keywords,
+        )
         if not found and may_fallback and effective_plan.keywords:
             relaxed = effective_plan.model_copy(update={"keywords": []})
-            found = fn(db, user, relaxed, entities, limit=per_source, use_keywords=False)
+            found = fn(
+                db, user, relaxed, entities, limit=per_source, use_keywords=False
+            )
         hits.extend(found)
 
     hits.sort(key=lambda h: h.score, reverse=True)

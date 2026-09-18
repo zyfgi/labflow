@@ -3,9 +3,10 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import EXPERIMENT_STATUSES
+from app.schemas.base import StrictSchema
 
 
-class ExperimentCreate(BaseModel):
+class ExperimentCreate(StrictSchema):
     project_id: int
     task_id: int | None = None
     title: str = Field(min_length=1, max_length=200)
@@ -17,7 +18,7 @@ class ExperimentCreate(BaseModel):
     parameters: str | None = Field(default=None, max_length=5000)
 
 
-class ExperimentUpdate(BaseModel):
+class ExperimentUpdate(StrictSchema):
     task_id: int | None = None
     title: str | None = Field(default=None, max_length=200)
     objective: str | None = Field(default=None, max_length=5000)

@@ -17,7 +17,10 @@ from app.models.experiment import Experiment
 from app.models.project import Project, Task
 from app.models.user import MemberProfile, User
 from app.permissions import is_teaching_staff
-from app.permissions.projects import apply_project_read_scope, visible_project_ids_subquery
+from app.permissions.projects import (
+    apply_project_read_scope,
+    visible_project_ids_subquery,
+)
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -51,17 +54,24 @@ def global_search(
             .limit(5)
         ).all()
         results["members"] = [
-            {"id": m.id, "name": m.user.name if m.user else None, "member_type": m.member_type}
+            {
+                "id": m.id,
+                "name": m.user.name if m.user else None,
+                "member_type": m.member_type,
+            }
             for m in rows
         ]
 
     # projects: permission scope in SQL, then rank + limit
     proj_stmt = apply_project_read_scope(
-        select(Project).where(Project.name.ilike(kw) | Project.code.ilike(kw)), user, Project.id
+        select(Project).where(Project.name.ilike(kw) | Project.code.ilike(kw)),
+        user,
+        Project.id,
     ).order_by(Project.updated_at.desc())
     projects = db.scalars(proj_stmt.limit(5)).all()
     results["projects"] = [
-        {"id": p.id, "name": p.name, "code": p.code, "status": p.status} for p in projects
+        {"id": p.id, "name": p.name, "code": p.code, "status": p.status}
+        for p in projects
     ]
 
     # tasks: assignee OR readable projects, ranked in SQL
@@ -94,7 +104,12 @@ def global_search(
     ).order_by(Experiment.experiment_date.desc().nullslast())
     experiments = db.scalars(exp_stmt.limit(5)).all()
     results["experiments"] = [
-        {"id": e.id, "experiment_no": e.experiment_no, "title": e.title, "status": e.status}
+        {
+            "id": e.id,
+            "experiment_no": e.experiment_no,
+            "title": e.title,
+            "status": e.status,
+        }
         for e in experiments
     ]
 
